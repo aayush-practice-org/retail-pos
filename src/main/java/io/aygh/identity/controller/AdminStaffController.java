@@ -10,6 +10,7 @@ import io.aygh.identity.service.query.StaffQueryService;
 import io.aygh.shared.response.ApiResponse;
 import io.aygh.shared.response.PageableRequest;
 import io.aygh.shared.response.PagedResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,7 @@ import java.util.UUID;
  *  may staff the floor but cannot mint admins or fellow managers — that rule lives
  *  in UserValidation, one layer down, so it holds however staff are reached.
  */
+@Tag(name = "Admin · Staff", description = "Staff accounts and their roles.")
 @RestController
 @RequestMapping("/admin/staff")
 @RequiredArgsConstructor

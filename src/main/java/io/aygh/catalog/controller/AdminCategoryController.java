@@ -5,6 +5,7 @@ import io.aygh.catalog.dto.response.CategoryResponse;
 import io.aygh.catalog.service.command.CategoryCommandService;
 import io.aygh.catalog.service.query.CategoryQueryService;
 import io.aygh.shared.response.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +27,7 @@ import java.util.List;
  *  Categories are hierarchical — a category may hold subcategories to any depth.
  *  Fetched whole (NO pagination), since the tree is browsed rather than paged.
  */
+@Tag(name = "Admin · Categories", description = "Product categories.")
 @RestController
 @RequestMapping("/admin/categories")
 @RequiredArgsConstructor

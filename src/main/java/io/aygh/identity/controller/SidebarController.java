@@ -4,6 +4,7 @@ import io.aygh.identity.dto.response.sidebar.SidebarGroupResponse;
 import io.aygh.identity.entity.SidebarApp;
 import io.aygh.identity.service.sidebar.SidebarService;
 import io.aygh.shared.response.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,7 @@ import java.util.List;
  *  gets the till's nav — dashboard, sale screen, payments; the back office asks
  *  for ?app=BACK_OFFICE, or for everything at once when the same person runs both.
  */
+@Tag(name = "Sidebar", description = "Navigation for whichever app the signed-in role lands in.")
 @RestController
 @RequestMapping("/api/sidebar")
 @RequiredArgsConstructor

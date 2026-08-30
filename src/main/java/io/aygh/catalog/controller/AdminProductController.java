@@ -12,6 +12,7 @@ import io.aygh.catalog.service.query.ProductVariantQueryService;
 import io.aygh.shared.response.ApiResponse;
 import io.aygh.shared.response.PageableRequest;
 import io.aygh.shared.response.PagedResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,7 @@ import java.util.List;
  *  units. Their variants hang off them as a sub-resource: a variant is created,
  *  edited and deleted under its own product and belongs to nothing else.
  */
+@Tag(name = "Admin · Products", description = "Products and their variants.")
 @RestController
 @RequestMapping("/admin/products")
 @RequiredArgsConstructor

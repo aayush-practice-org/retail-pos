@@ -4,6 +4,7 @@ import io.aygh.identity.dto.request.ChangePasswordRequest;
 import io.aygh.identity.dto.response.SelfResponse;
 import io.aygh.identity.service.query.SelfQueryService;
 import io.aygh.shared.response.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  *  reaches anyone else's password here. Resetting someone else's is an admin
  *  action and lives on /admin/staff instead.
  */
+@Tag(name = "Self", description = "The signed-in user's own account.")
 @RestController
 @RequestMapping("/api/self")
 @RequiredArgsConstructor

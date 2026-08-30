@@ -8,6 +8,7 @@ import io.aygh.unit.dto.response.UnitResponse;
 import io.aygh.unit.service.command.CustomUnitCommandService;
 import io.aygh.unit.service.query.CustomUnitQueryService;
 import io.aygh.unit.service.query.SystemUnitQueryService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ import java.util.UUID;
  *  System units are seeded at the system level and are read-only.
  *  The mart may only add, edit and remove its own custom units.
  */
+@Tag(name = "Admin · Units", description = "System base units and the custom units defined against them.")
 @RestController
 @RequestMapping("/admin/units")
 @RequiredArgsConstructor
