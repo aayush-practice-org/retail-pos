@@ -1,33 +1,24 @@
 package io.aygh.identity.entity;
 
 import io.aygh.shared.entity.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import io.aygh.shared.entity.Gender;
+import jakarta.persistence.*;
+import lombok.*;
 import org.hibernate.annotations.SQLDelete;
-import org.hibernate.annotations.SQLRestriction;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+
 @Entity
-@Table(name = "users")
-@SQLRestriction("deleted_at IS NULL")
-@SQLDelete(sql = "UPDATE users SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?")
+@Table(name = "users", schema = "public")
+@SQLDelete(sql = "UPDATE public.users SET deleted_at = NOW() WHERE id = ?")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -35,40 +26,116 @@ import java.util.UUID;
 @Builder
 public class User extends BaseEntity implements UserDetails {
 
+    /**
+     * Assigned in Java rather than by the database, because an admin's own id is
+     * also its tenant id: the row cannot be inserted until the value is known,
+     * and a generated key is only known afterwards.
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "full_name")
-    private String fullName;
+    // ── Credentials ───────────────────────────────────────────────────────
 
-    @Column(name = "username", nullable = false, unique = true)
+    @Column(name = "username", nullable = false, length = 50)
     private String username;
 
     @Column(name = "password", nullable = false)
     private String password;
 
-    @Column(name = "email", nullable = false, unique = true)
+    @Column(name = "email", nullable = false)
     private String email;
 
-    @Column(name = "phone", length = 30)
-    private String phone;
+    // ── Authorisation ─────────────────────────────────────────────────────
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "role_name", nullable = false, length = 30)
+    @Column(name = "role_name", nullable = false, length = 40)
     private UserRole role;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
-    @Column(name = "is_active", nullable = false)
-    private boolean isActive = true;
+    private UserStatus status = UserStatus.ACTIVE;
+
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
+
+    // ── Tenancy ───────────────────────────────────────────────────────────
+
+    @Column(name = "tenant_id")
+    private UUID tenantId;
+
+    @Column(name = "tenant_slug", length = 63)
+    private String tenantSlug;
+
+    // ── Personal information ──────────────────────────────────────────────
+
+    @Column(name = "full_name")
+    private String fullName;
+
+    @Column(name = "dob")
+    private LocalDate dob;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", length = 20)
+    private Gender gender;
+
+    @Column(name = "country", length = 100)
+    private String country;
+
+    // ── Contact information ───────────────────────────────────────────────
+
+    @Column(name = "mobile_number", length = 30)
+    private String mobileNumber;
+
+    // ── Address information ───────────────────────────────────────────────
+
+    @Column(name = "address_line1")
+    private String addressLine1;
+
+    @Column(name = "address_line2")
+    private String addressLine2;
+
+    @Column(name = "city")
+    private String city;
+
+    @Column(name = "state")
+    private String state;
+
+    @Column(name = "zip_code", length = 20)
+    private String zipCode;
+
+    /**
+     * Safety net for any path that builds an account without asking for an id first.
+     */
+    @PrePersist
+    void ensureId() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
+    }
+
+    // ── UserDetails ───────────────────────────────────────────────────────
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority(this.role.getAuthority()));
+        return role == null ? List.of() : List.of(new SimpleGrantedAuthority(role.authority()));
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return expiresAt == null || expiresAt.isAfter(Instant.now());
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return status != UserStatus.SUSPENDED;
     }
 
     @Override
     public boolean isEnabled() {
-        return this.isActive;
+        return status != null && status.canSignIn() && getDeletedAt() == null;
     }
 }

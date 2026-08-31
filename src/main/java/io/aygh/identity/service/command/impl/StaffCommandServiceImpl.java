@@ -1,15 +1,18 @@
 package io.aygh.identity.service.command.impl;
 
+import io.aygh.exception.BusinessException;
+import io.aygh.identity.dto.request.ResetPasswordRequest;
 import io.aygh.identity.dto.request.StaffCreateRequest;
 import io.aygh.identity.dto.request.StaffUpdateRequest;
 import io.aygh.identity.dto.response.StaffResponse;
 import io.aygh.identity.entity.User;
-import io.aygh.identity.entity.UserRole;
+import io.aygh.identity.entity.UserStatus;
 import io.aygh.identity.helper.UserResolver;
 import io.aygh.identity.helper.UserValidation;
-import io.aygh.identity.mapper.UserMapper;
+import io.aygh.identity.mapper.StaffMapper;
 import io.aygh.identity.repository.UserRepository;
 import io.aygh.identity.service.command.StaffCommandService;
+import io.aygh.shared.UserHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,140 +21,88 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+
 @Service
-@Slf4j
 @RequiredArgsConstructor
-class StaffCommandServiceImpl implements StaffCommandService {
+@Slf4j
+@Transactional
+public class StaffCommandServiceImpl implements StaffCommandService {
 
     private final UserRepository userRepository;
     private final UserResolver userResolver;
     private final UserValidation userValidation;
-    private final UserMapper userMapper;
+    private final StaffMapper staffMapper;
     private final PasswordEncoder passwordEncoder;
 
     @Override
-    @Transactional
-    public StaffResponse create(StaffCreateRequest request) {
-        userValidation.validateCanAssignRole(request.role());
-        userValidation.validateUniqueUsername(request.username(), null);
-        userValidation.validateUniqueEmail(request.email(), null);
+    public StaffResponse createStaff(StaffCreateRequest request) {
+        UUID tenantId = UserHolder.getTenantId();
 
-        User staff = User.builder()
-                .username(request.username())
-                .fullName(request.fullName())
-                .email(request.email())
-                .phone(request.phone())
-                .password(passwordEncoder.encode(request.password()))
-                .role(request.role())
-                .isActive(true)
-                .build();
+        userValidation.requireAssignableByAdmin(request.role());
+        userValidation.requireUsernameAvailable(request.username(), null);
+        userValidation.requireEmailAvailable(request.email(), null);
+
+        User staff = staffMapper.toUser(request);
+        staff.setPassword(passwordEncoder.encode(request.password()));
+        staff.setStatus(request.status() == null ? UserStatus.ACTIVE : request.status());
+        staff.setTenantId(tenantId);
+        staff.setTenantSlug(UserHolder.getTenantSlug());
 
         User saved = userRepository.save(staff);
-        log.info("Created staff id={} username={} role={}", saved.getId(), saved.getUsername(), saved.getRole());
+        log.info("Created {} account '{}' in tenant '{}'",
+                saved.getRole(), saved.getUsername(), saved.getTenantSlug());
+        return staffMapper.toResponse(saved);
+    }
 
-        return userMapper.toStaffResponse(saved);
+    @Override
+    public StaffResponse updateStaff(UUID id, StaffUpdateRequest request) {
+        User staff = requireOwnStaff(id);
+
+        userValidation.requireAssignableByAdmin(request.role());
+        userValidation.requireUsernameAvailable(request.username(), id);
+        userValidation.requireEmailAvailable(request.email(), id);
+
+        staffMapper.applyUpdate(request, staff);
+
+        User saved = userRepository.save(staff);
+        log.info("Updated staff account '{}' in tenant '{}'", saved.getUsername(), saved.getTenantSlug());
+        return staffMapper.toResponse(saved);
+    }
+
+    @Override
+    public void resetStaffPassword(UUID id, ResetPasswordRequest request) {
+        User staff = requireOwnStaff(id);
+        staff.setPassword(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(staff);
+        log.info("Reset the password for staff account '{}'", staff.getUsername());
+    }
+
+    @Override
+    public void deleteStaff(UUID id) {
+        User staff = requireOwnStaff(id);
+        userRepository.delete(staff);
+        log.info("Retired staff account '{}' in tenant '{}'", staff.getUsername(), staff.getTenantSlug());
     }
 
     /**
-     * A partial update: only the fields the caller actually sent are touched.
+     * The account behind {@code id}, provided it is staff of the caller's own
+     * mart. An admin's own account is excluded too: editing or deleting itself
+     * through the staff screens would let it change its own role.
      */
-    @Override
-    @Transactional
-    public StaffResponse update(UUID id, StaffUpdateRequest request) {
-        User staff = userResolver.resolve(id);
+    private User requireOwnStaff(UUID id) {
+        UUID tenantId = UserHolder.getTenantId();
 
-        userValidation.validateCanManage(staff);
-
-        applyUsername(staff, request.username());
-        applyEmail(staff, request.email());
-        applyRole(staff, request.role());
-        applyActive(staff, request.isActive());
-
-        if (request.fullName() != null) {
-            staff.setFullName(request.fullName());
+        if (id.equals(UserHolder.getUserId())) {
+            throw new BusinessException("Use the profile endpoints to change your own account");
         }
 
-        if (request.phone() != null) {
-            staff.setPhone(request.phone());
+        User staff = userResolver.byIdInTenant(id, tenantId);
+
+        if (!staff.getRole().isStaff()) {
+            throw new BusinessException("Only staff accounts can be managed here");
         }
-
-        if (request.password() != null && !request.password().isBlank()) {
-            staff.setPassword(passwordEncoder.encode(request.password()));
-            log.info("Password reset for staff id={}", id);
-        }
-
-        log.info("Updated staff id={}", id);
-
-        return userMapper.toStaffResponse(staff);
+        return staff;
     }
 
-    @Override
-    @Transactional
-    public StaffResponse setActive(UUID id, boolean active) {
-        User staff = userResolver.resolve(id);
 
-        userValidation.validateCanManage(staff);
-        applyActive(staff, active);
-
-        log.info("Staff id={} is now {}", id, active ? "active" : "deactivated");
-
-        return userMapper.toStaffResponse(staff);
-    }
-
-    @Override
-    @Transactional
-    public void delete(UUID id) {
-        User staff = userResolver.resolve(id);
-
-        userValidation.validateCanManage(staff);
-        userValidation.validateNotSelf(staff, "delete");
-        userValidation.validateNotLastAdmin(staff);
-
-        // Soft delete — the row stays, and the username and email free up for reuse
-        userRepository.delete(staff);
-        log.info("Deleted staff id={} username={}", id, staff.getUsername());
-    }
-
-    private void applyUsername(User staff, String username) {
-        if (username == null || username.equals(staff.getUsername())) {
-            return;
-        }
-
-        userValidation.validateUniqueUsername(username, staff.getId());
-        staff.setUsername(username);
-    }
-
-    private void applyEmail(User staff, String email) {
-        if (email == null || email.equals(staff.getEmail())) {
-            return;
-        }
-
-        userValidation.validateUniqueEmail(email, staff.getId());
-        staff.setEmail(email);
-    }
-
-    private void applyRole(User staff, UserRole role) {
-        if (role == null || role == staff.getRole()) {
-            return;
-        }
-
-        userValidation.validateCanAssignRole(role);
-        // Demoting the last owner would leave the mart with nobody who can let people back in
-        userValidation.validateNotLastAdmin(staff);
-
-        staff.setRole(role);
-    }
-
-    private void applyActive(User staff, Boolean active) {
-        if (active == null || active == staff.isActive()) {
-            return;
-        }
-
-        if (!active) {
-            userValidation.validateNotSelf(staff, "deactivate");
-            userValidation.validateNotLastAdmin(staff);
-        }
-
-        staff.setActive(active);
-    }
 }

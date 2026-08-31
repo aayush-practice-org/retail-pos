@@ -56,8 +56,8 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * A role reaching for a module it cannot see — thrown by the
-     * {@code @PreAuthorize("@rbac.canAccess('...')")} guards on the admin controllers.
+     * A role reaching past its tier — thrown by the {@code @PreAuthorize} guards
+     * on the super admin and staff controllers.
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {

@@ -1,30 +1,60 @@
 package io.aygh.identity.dto.request;
 
 import io.aygh.identity.entity.UserRole;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.Size;
+import io.aygh.identity.entity.UserStatus;
+import io.aygh.shared.entity.Gender;
+import jakarta.validation.constraints.*;
 
-/**
- * Every field is optional — only what is supplied gets changed.
- */
+import java.time.Instant;
+import java.time.LocalDate;
+
+
 public record StaffUpdateRequest(
+
+        @NotBlank(message = "Username is required")
         @Size(min = 3, max = 50, message = "Username must be between 3 and 50 characters")
         String username,
 
-        @Size(max = 255, message = "Full name must not exceed 255 characters")
-        String fullName,
-
-        @Email(message = "Invalid email format")
+        @NotBlank(message = "Email is required")
+        @Email(message = "Email must be a valid address")
         String email,
 
-        @Size(max = 30, message = "Phone must not exceed 30 characters")
-        String phone,
-
-        @Size(min = 6, message = "Password must be at least 6 characters long")
-        String password,
-
+        @NotNull(message = "Role is required")
         UserRole role,
 
-        Boolean isActive
+        @NotNull(message = "Status is required")
+        UserStatus status,
+
+        Instant expiresAt,
+
+        @NotBlank(message = "Full name is required")
+        @Size(max = 255)
+        String fullName,
+
+        @Past(message = "Date of birth must be in the past")
+        LocalDate dob,
+
+        Gender gender,
+
+        @Size(max = 100)
+        String country,
+
+        @Size(max = 30)
+        String mobileNumber,
+
+        @Size(max = 255)
+        String addressLine1,
+
+        @Size(max = 255)
+        String addressLine2,
+
+        @Size(max = 255)
+        String city,
+
+        @Size(max = 255)
+        String state,
+
+        @Size(max = 20)
+        String zipCode
 ) {
 }

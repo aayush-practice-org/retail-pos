@@ -31,7 +31,8 @@ public record ApiResponse<T>(
         Instant timestamp
 ) {
     // ── Nested error type ──────────────────────────────────────────────────
-    public record FieldError(String field, String message) {}
+    public record FieldError(String field, String message) {
+    }
 
     // ── Success factories ──────────────────────────────────────────────────
 
@@ -43,8 +44,9 @@ public record ApiResponse<T>(
         return new ApiResponse<>(true, HttpStatus.OK.value(), message, data, null, Instant.now());
     }
 
+    /** A success with nothing to return but the message — a delete, a password reset. */
     public static <T> ApiResponse<T> ok(String message) {
-        return new ApiResponse<>(true, HttpStatus.NO_CONTENT.value(), message, null, null, Instant.now());
+        return new ApiResponse<>(true, HttpStatus.OK.value(), message, null, null, Instant.now());
     }
 
     public static <T> ApiResponse<T> created(T data) {
