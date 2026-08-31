@@ -57,9 +57,11 @@ CREATE TABLE users
 -- all at runtime, silently, on the next deploy.
 ALTER TABLE users
     ADD CONSTRAINT chk_users_role_name CHECK (role_name IN (
-        'SUPER_ADMIN', 'ADMIN', 'STORE_MANAGER', 'CASHIER', 'SALES_EXECUTIVE',
-        'INVENTORY_MANAGER', 'STORE_KEEPER', 'PURCHASE_OFFICER', 'ACCOUNTANT',
-        'HR_MANAGER', 'CUSTOMER_SUPPORT'));
+                                                            'SUPER_ADMIN', 'ADMIN', 'STORE_MANAGER', 'CASHIER',
+                                                            'SALES_EXECUTIVE',
+                                                            'INVENTORY_MANAGER', 'STORE_KEEPER', 'PURCHASE_OFFICER',
+                                                            'ACCOUNTANT',
+                                                            'HR_MANAGER', 'CUSTOMER_SUPPORT'));
 
 ALTER TABLE users
     ADD CONSTRAINT chk_users_status CHECK (status IN ('ACTIVE', 'INACTIVE', 'SUSPENDED'));
