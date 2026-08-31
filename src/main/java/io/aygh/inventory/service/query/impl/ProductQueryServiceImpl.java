@@ -43,7 +43,6 @@ public class ProductQueryServiceImpl implements ProductQueryService {
     public PagedResponse<ProductSummaryResponse> findAll(
             String search, Long categoryId, Boolean active, Pageable pageable) {
 
-        resolver.requireTenantContext();
 
         List<Specification<Product>> filters = Stream.of(matches(search), inCategory(categoryId), isActive(active))
                 .filter(Objects::nonNull)
@@ -55,33 +54,28 @@ public class ProductQueryServiceImpl implements ProductQueryService {
 
     @Override
     public ProductDetailResponse findById(Long id) {
-        resolver.requireTenantContext();
         return productMapper.toDetail(resolver.productDetail(id));
     }
 
     @Override
     public List<ProductPurchaseUnitResponse> findPurchaseUnits(Long productId) {
-        resolver.requireTenantContext();
         resolver.product(productId);
         return productUnitMapper.toPurchaseResponses(purchaseUnitRepository.findByProductId(productId));
     }
 
     @Override
     public ProductPurchaseUnitDetailResponse findPurchaseUnit(Long productId, Long purchaseUnitId) {
-        resolver.requireTenantContext();
         return productUnitMapper.toDetail(resolver.purchaseUnitDetail(productId, purchaseUnitId));
     }
 
     @Override
     public List<ProductSellingUnitResponse> findSellingUnits(Long productId) {
-        resolver.requireTenantContext();
         resolver.product(productId);
         return productUnitMapper.toSellingResponses(sellingUnitRepository.findByProductId(productId));
     }
 
     @Override
     public ProductSellingUnitResponse findByBarcode(String barcode) {
-        resolver.requireTenantContext();
         return sellingUnitRepository.findByBarcode(barcode)
                 .map(productUnitMapper::toResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Product", "barcode", barcode));

@@ -32,13 +32,11 @@ public class UnitQueryServiceImpl implements UnitQueryService {
 
     @Override
     public UnitResponse findById(Long id) {
-        resolver.requireTenantContext();
         return unitMapper.toResponse(resolver.unit(id));
     }
 
     @Override
     public PagedResponse<UnitResponse> findAll(String search, MeasurementType measurementType, Pageable pageable) {
-        resolver.requireTenantContext();
 
         List<Specification<Unit>> filters = Stream.of(matches(search), ofType(measurementType))
                 .filter(Objects::nonNull)
@@ -50,7 +48,6 @@ public class UnitQueryServiceImpl implements UnitQueryService {
 
     @Override
     public List<UnitResponse> findAllForSelection(MeasurementType measurementType) {
-        resolver.requireTenantContext();
 
         List<Unit> units = measurementType == null
                 ? unitRepository.findAll(Sort.by("name"))

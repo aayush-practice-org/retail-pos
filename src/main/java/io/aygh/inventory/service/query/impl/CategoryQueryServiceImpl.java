@@ -37,7 +37,6 @@ public class CategoryQueryServiceImpl implements CategoryQueryService {
 
     @Override
     public CategoryDetailResponse findById(Long id) {
-        resolver.requireTenantContext();
         Category category = resolver.categoryWithUnits(id);
 
         CategoryDetailResponse response = categoryMapper.toDetail(category);
@@ -49,7 +48,6 @@ public class CategoryQueryServiceImpl implements CategoryQueryService {
 
     @Override
     public PagedResponse<CategorySummaryResponse> findAll(String search, Pageable pageable) {
-        resolver.requireTenantContext();
 
         Specification<Category> spec = matches(search);
         Page<Category> page = spec == null
@@ -61,13 +59,11 @@ public class CategoryQueryServiceImpl implements CategoryQueryService {
 
     @Override
     public List<CategorySummaryResponse> findAllForSelection() {
-        resolver.requireTenantContext();
         return categoryMapper.toSummaries(categoryRepository.findAll(Sort.by("name")));
     }
 
     @Override
     public List<UnitResponse> findPermittedUnits(Long categoryId, UnitUsage usage) {
-        resolver.requireTenantContext();
         resolver.category(categoryId);
 
         return categoryUnitRepository.findByCategoryIdAndUsage(categoryId, usage).stream()
