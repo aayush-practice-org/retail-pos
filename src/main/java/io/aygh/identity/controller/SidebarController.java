@@ -35,14 +35,5 @@ public class SidebarController {
         return ResponseEntity.ok(ApiResponse.ok(sidebarService.currentUserSidebar()));
     }
 
-    /**
-     * What a role would see. For an admin deciding which role to hand a new
-     * hire, and for checking the table without signing in as each role in turn.
-     */
-    @Operation(summary = "The sidebar a given role would be shown")
-    @GetMapping("/preview/{role}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
-    public ResponseEntity<ApiResponse<List<SidebarGroupResponse>>> preview(@PathVariable UserRole role) {
-        return ResponseEntity.ok(ApiResponse.ok(sidebarService.sidebarFor(role)));
-    }
+
 }
