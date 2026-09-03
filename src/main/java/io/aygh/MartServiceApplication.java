@@ -1,6 +1,7 @@
 package io.aygh;
 
 import io.aygh.config.properties.DefaultAdminProperties;
+import io.aygh.config.properties.TaxProperties;
 import io.aygh.config.properties.TokenProperties;
 import me.paulschwarz.springdotenv.spring.DotenvApplicationInitializer;
 import org.springframework.boot.SpringApplication;
@@ -10,7 +11,7 @@ import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoCon
 
 
 @SpringBootApplication(exclude = {UserDetailsServiceAutoConfiguration.class})
-@EnableConfigurationProperties({TokenProperties.class, DefaultAdminProperties.class})
+@EnableConfigurationProperties({TokenProperties.class, DefaultAdminProperties.class, TaxProperties.class})
 public class MartServiceApplication {
 
     public static void main(String[] args) {

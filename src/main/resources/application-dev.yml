@@ -39,6 +39,10 @@ app:
     full-name: ${DEFAULT_SUPERADMIN_FULL_NAME}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
+  tax:
+    # The rate sales are billed VAT at. Purchases use their own per-product,
+    # effective-dated rates and ignore this.
+    vat-rate: ${APP_VAT_RATE:13}
 
 springdoc:
   api-docs:
