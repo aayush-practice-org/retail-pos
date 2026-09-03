@@ -94,7 +94,6 @@ public class CategoryController {
     @PostMapping("/{id}/units")
     public ResponseEntity<ApiResponse<CategoryDetailResponse>> allowUnit(
             @PathVariable Long id, @Valid @RequestBody CategoryUnitRequest request) {
-
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created(categoryCommandService.allowUnit(id, request)));
     }
