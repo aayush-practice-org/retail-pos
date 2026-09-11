@@ -52,76 +52,38 @@ public final class SidebarCatalog {
 
             new Group("Platform", List.of(
                     new Item("Dashboard", "/platform/dashboard", "LayoutDashboard", SidebarMenu.PLATFORM_DASHBOARD),
-                    new Item("Marts", "/platform/marts", "Store", SidebarMenu.MARTS, List.of(
-                            new SubItem("All Marts", "/platform/marts", SidebarMenu.MARTS),
-                            new SubItem("Provisioning", "/platform/marts/provisioning", SidebarMenu.MART_PROVISIONING)
-                    ))
+                    new Item("Marts", "/platform/marts", "Store", SidebarMenu.MARTS)
             )),
 
             new Group("Overview", List.of(
                     new Item("Dashboard", "/dashboard", "LayoutDashboard", SidebarMenu.DASHBOARD)
             )),
 
-            new Group("Sales", List.of(
+            new Group("Sales & POS", List.of(
                     new Item("Point of Sale", "/pos", "ScanBarcode", SidebarMenu.POS),
-                    new Item("Sales", "/sales", "ReceiptText", SidebarMenu.SALES, List.of(
-                            new SubItem("Orders", "/sales/orders", SidebarMenu.ORDERS),
-                            new SubItem("Invoices", "/sales/invoices", SidebarMenu.INVOICES),
-                            new SubItem("Returns", "/sales/returns", SidebarMenu.RETURNS)
-                    )),
-                    new Item("Customers", "/customers", "Users", SidebarMenu.CUSTOMERS, List.of(
-                            new SubItem("Directory", "/customers", SidebarMenu.CUSTOMER_DIRECTORY),
-                            new SubItem("Loyalty", "/customers/loyalty", SidebarMenu.LOYALTY),
-                            new SubItem("Credit", "/customers/credit", SidebarMenu.CUSTOMER_CREDIT)
-                    ))
+                    new Item("Sales History", "/sales", "ReceiptText", SidebarMenu.SALES),
+                    new Item("Customers", "/customers", "Users", SidebarMenu.CUSTOMERS)
             )),
 
-            new Group("Catalogue", List.of(
-                    new Item("Products", "/catalogue/products", "Package", SidebarMenu.PRODUCTS, List.of(
-                            new SubItem("All Products", "/catalogue/products", SidebarMenu.PRODUCTS),
-                            new SubItem("Categories", "/catalogue/categories", SidebarMenu.CATEGORIES)
-                    )),
-                    new Item("Measurement Units", "/catalogue/units", "Scale", SidebarMenu.UNITS)
+            new Group("Catalogue & Inventory", List.of(
+                    new Item("Products", "/catalogue/products", "Package", SidebarMenu.PRODUCTS),
+                    new Item("Categories", "/catalogue/categories", "FolderTree", SidebarMenu.CATEGORIES),
+                    new Item("Units", "/catalogue/units", "Scale", SidebarMenu.UNITS),
+                    new Item("Stock Levels", "/inventory/stock", "Boxes", SidebarMenu.STOCK_LEVELS),
+                    new Item("Stock Adjustments", "/inventory/stock/adjustments", "SlidersHorizontal", SidebarMenu.STOCK_ADJUSTMENTS)
             )),
 
-            new Group("Inventory", List.of(
-                    new Item("Stock", "/inventory/stock", "Boxes", SidebarMenu.INVENTORY, List.of(
-                            new SubItem("Stock Levels", "/inventory/stock", SidebarMenu.STOCK_LEVELS),
-                            new SubItem("Adjustments", "/inventory/stock/adjustments", SidebarMenu.STOCK_ADJUSTMENTS),
-                            new SubItem("Write-offs", "/inventory/stock/write-offs", SidebarMenu.STOCK_WRITE_OFFS)
-                    ))
+            new Group("Procurement", List.of(
+                    new Item("Purchases", "/purchases", "ShoppingCart", SidebarMenu.PURCHASES),
+                    new Item("Vendors", "/vendors", "Truck", SidebarMenu.VENDORS)
             )),
 
-            new Group("Purchasing", List.of(
-                    new Item("Purchases", "/purchases", "ShoppingCart", SidebarMenu.PURCHASE, List.of(
-                            new SubItem("Purchase Orders", "/purchases/orders", SidebarMenu.PURCHASE_ORDERS),
-                            new SubItem("Goods Receipts", "/purchases/receipts", SidebarMenu.GOODS_RECEIPTS)
-                    )),
-                    new Item("Vendors", "/vendors", "Truck", SidebarMenu.VENDOR)
+            new Group("Reports", List.of(
+                    new Item("Sales Reports", "/reports/sales", "ChartColumn", SidebarMenu.REPORTS)
             )),
 
-            new Group("Finance", List.of(
-                    new Item("Accounting", "/finance", "Landmark", SidebarMenu.ACCOUNTING, List.of(
-                            new SubItem("Ledger", "/finance/ledger", SidebarMenu.LEDGER),
-                            new SubItem("Expenses", "/finance/expenses", SidebarMenu.EXPENSES),
-                            new SubItem("Taxes", "/finance/taxes", SidebarMenu.TAXES)
-                    )),
-                    new Item("Reports", "/reports", "ChartColumn", SidebarMenu.REPORTS, List.of(
-                            new SubItem("Sales", "/reports/sales", SidebarMenu.SALES_REPORTS),
-                            new SubItem("Inventory", "/reports/inventory", SidebarMenu.INVENTORY_REPORTS),
-                            new SubItem("Financial", "/reports/financial", SidebarMenu.FINANCE_REPORTS)
-                    ))
-            )),
-
-            new Group("People", List.of(
-                    new Item("Staff", "/staff", "UserCog", SidebarMenu.STAFF, List.of(
-                            new SubItem("Directory", "/staff", SidebarMenu.STAFF_DIRECTORY),
-                            new SubItem("Attendance", "/staff/attendance", SidebarMenu.ATTENDANCE),
-                            new SubItem("Payroll", "/staff/payroll", SidebarMenu.PAYROLL)
-                    ))
-            )),
-
-            new Group("Settings", List.of(
+            new Group("Administration", List.of(
+                    new Item("Staff", "/staff", "UserCog", SidebarMenu.STAFF),
                     new Item("Mart Settings", "/settings", "Settings", SidebarMenu.SETTINGS),
                     new Item("My Account", "/account", "CircleUser", SidebarMenu.ACCOUNT)
             ))

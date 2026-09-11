@@ -30,96 +30,44 @@ public enum SidebarMenu {
 
     PLATFORM_DASHBOARD(EnumSet.of(UserRole.SUPER_ADMIN)),
     MARTS(EnumSet.of(UserRole.SUPER_ADMIN)),
-    MART_PROVISIONING(EnumSet.of(UserRole.SUPER_ADMIN)),
 
     // ── Overview ──────────────────────────────────────────────────────────
 
-    /**
-     * The one page every account inside a mart may open.
-     */
     DASHBOARD(RoleSets.EVERY_MART_ROLE),
 
-    // ── Sales ─────────────────────────────────────────────────────────────
+    // ── Sales & POS ───────────────────────────────────────────────────────
 
     POS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.CASHIER)),
     SALES(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.SALES_EXECUTIVE,
-            UserRole.ACCOUNTANT, UserRole.CUSTOMER_SUPPORT)),
-    ORDERS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.SALES_EXECUTIVE)),
-    INVOICES(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.SALES_EXECUTIVE,
-            UserRole.ACCOUNTANT)),
-    RETURNS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.SALES_EXECUTIVE,
-            UserRole.CUSTOMER_SUPPORT)),
-
+            UserRole.ACCOUNTANT, UserRole.CASHIER, UserRole.CUSTOMER_SUPPORT)),
     CUSTOMERS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.SALES_EXECUTIVE,
-            UserRole.CUSTOMER_SUPPORT, UserRole.ACCOUNTANT)),
-    CUSTOMER_DIRECTORY(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER,
-            UserRole.SALES_EXECUTIVE, UserRole.CUSTOMER_SUPPORT)),
-    LOYALTY(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.CUSTOMER_SUPPORT)),
-    CUSTOMER_CREDIT(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER,
-            UserRole.ACCOUNTANT, UserRole.CUSTOMER_SUPPORT)),
+            UserRole.ACCOUNTANT, UserRole.CASHIER, UserRole.CUSTOMER_SUPPORT)),
 
-    // ── Catalogue — mirrors the guards on the /inventory/* controllers ─────
+    // ── Catalogue & Inventory ─────────────────────────────────────────────
 
     PRODUCTS(RoleSets.CATALOGUE),
     CATEGORIES(RoleSets.CATALOGUE),
     UNITS(RoleSets.CATALOGUE),
-
-    // ── Inventory ─────────────────────────────────────────────────────────
-
-    INVENTORY(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.INVENTORY_MANAGER,
-            UserRole.STORE_KEEPER)),
     STOCK_LEVELS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER,
             UserRole.INVENTORY_MANAGER, UserRole.STORE_KEEPER)),
     STOCK_ADJUSTMENTS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER,
             UserRole.INVENTORY_MANAGER, UserRole.STORE_KEEPER)),
-    STOCK_WRITE_OFFS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER,
-            UserRole.INVENTORY_MANAGER)),
 
-    // ── Purchasing ────────────────────────────────────────────────────────
+    // ── Procurement ───────────────────────────────────────────────────────
 
-    PURCHASE(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.INVENTORY_MANAGER,
+    PURCHASES(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.INVENTORY_MANAGER,
             UserRole.PURCHASE_OFFICER, UserRole.STORE_KEEPER)),
-    PURCHASE_ORDERS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER,
-            UserRole.INVENTORY_MANAGER, UserRole.PURCHASE_OFFICER)),
-    GOODS_RECEIPTS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER,
-            UserRole.INVENTORY_MANAGER, UserRole.PURCHASE_OFFICER, UserRole.STORE_KEEPER)),
-    VENDOR(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.INVENTORY_MANAGER,
+    VENDORS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.INVENTORY_MANAGER,
             UserRole.PURCHASE_OFFICER, UserRole.ACCOUNTANT)),
 
-    // ── Finance ───────────────────────────────────────────────────────────
+    // ── Reports ───────────────────────────────────────────────────────────
 
-    ACCOUNTING(EnumSet.of(UserRole.ADMIN, UserRole.ACCOUNTANT)),
-    LEDGER(EnumSet.of(UserRole.ADMIN, UserRole.ACCOUNTANT)),
-    EXPENSES(EnumSet.of(UserRole.ADMIN, UserRole.ACCOUNTANT)),
-    TAXES(EnumSet.of(UserRole.ADMIN, UserRole.ACCOUNTANT)),
+    REPORTS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.ACCOUNTANT)),
 
-    REPORTS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.INVENTORY_MANAGER,
-            UserRole.ACCOUNTANT)),
-    SALES_REPORTS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.ACCOUNTANT)),
-    INVENTORY_REPORTS(EnumSet.of(UserRole.ADMIN, UserRole.STORE_MANAGER,
-            UserRole.INVENTORY_MANAGER, UserRole.ACCOUNTANT)),
-    FINANCE_REPORTS(EnumSet.of(UserRole.ADMIN, UserRole.ACCOUNTANT)),
+    // ── Administration & Settings ─────────────────────────────────────────
 
-    // ── People ────────────────────────────────────────────────────────────
-
-    /**
-     * The gate on the People group as a whole; the pages inside it are narrower.
-     */
-    STAFF(EnumSet.of(UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.STORE_MANAGER,
-            UserRole.ACCOUNTANT)),
-    /**
-     * {@code /admin/staff} is admin-only, so the directory is too.
-     */
-    STAFF_DIRECTORY(EnumSet.of(UserRole.ADMIN)),
-    ATTENDANCE(EnumSet.of(UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.STORE_MANAGER)),
-    PAYROLL(EnumSet.of(UserRole.ADMIN, UserRole.HR_MANAGER, UserRole.ACCOUNTANT)),
-
-    // ── Settings ──────────────────────────────────────────────────────────
-
+    STAFF(EnumSet.of(UserRole.ADMIN)),
     SETTINGS(EnumSet.of(UserRole.ADMIN)),
-    /**
-     * Own profile and password: every signed-in account, super admin included.
-     */
     ACCOUNT(EnumSet.allOf(UserRole.class));
 
     private final Set<UserRole> allowedRoles;
