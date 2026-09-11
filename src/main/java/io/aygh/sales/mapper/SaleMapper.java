@@ -19,12 +19,14 @@ import java.util.List;
 public class SaleMapper {
 
     public SaleSummaryResponse toSummary(Sale sale, int itemCount) {
+        Long customerId = sale.getCustomer() != null ? sale.getCustomer().getId() : null;
         return new SaleSummaryResponse(
                 sale.getId(),
                 sale.getInvoiceNumber(),
                 sale.getSoldAt(),
                 sale.getChannel(),
                 sale.getTaxScheme(),
+                customerId,
                 sale.getCustomerName(),
                 sale.getSubTotal(),
                 sale.getDiscountAmount(),
@@ -42,12 +44,14 @@ public class SaleMapper {
                 .map(this::toItem)
                 .toList();
 
+        Long customerId = sale.getCustomer() != null ? sale.getCustomer().getId() : null;
         return new SaleDetailResponse(
                 sale.getId(),
                 sale.getInvoiceNumber(),
                 sale.getSoldAt(),
                 sale.getChannel(),
                 sale.getTaxScheme(),
+                customerId,
                 sale.getCustomerName(),
                 sale.getCustomerPhone(),
                 sale.getCustomerPan(),

@@ -15,6 +15,7 @@ public record SaleSummaryResponse(
         Instant soldAt,
         SaleChannel channel,
         TaxScheme taxScheme,
+        Long customerId,
         String customerName,
         BigDecimal subTotal,
         BigDecimal discountAmount,

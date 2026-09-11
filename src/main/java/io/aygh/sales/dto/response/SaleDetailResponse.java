@@ -17,6 +17,7 @@ public record SaleDetailResponse(
         SaleChannel channel,
         TaxScheme taxScheme,
 
+        Long customerId,
         String customerName,
         String customerPhone,
         String customerPan,

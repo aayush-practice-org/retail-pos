@@ -35,6 +35,9 @@ public record SaleRequest(
         @DecimalMin(value = "0.0", message = "Discount cannot be negative")
         BigDecimal discountAmount,
 
+        /** Optional for cash sales, mandatory for CREDIT sales. */
+        Long customerId,
+
         @Size(max = 150) String customerName,
         @Size(max = 30) String customerPhone,
 

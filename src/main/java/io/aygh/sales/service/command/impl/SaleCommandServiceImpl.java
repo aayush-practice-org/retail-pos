@@ -1,5 +1,7 @@
 package io.aygh.sales.service.command.impl;
 
+import io.aygh.customer.entity.Customer;
+import io.aygh.customer.helper.CustomerResolver;
 import io.aygh.exception.BusinessException;
 import io.aygh.inventory.entity.Product;
 import io.aygh.inventory.entity.ProductSellingUnit;
@@ -40,6 +42,7 @@ public class SaleCommandServiceImpl implements SaleCommandService {
 
     private final SaleRepository saleRepository;
     private final SaleResolver resolver;
+    private final CustomerResolver customerResolver;
     private final SaleCalculator calculator;
     private final SaleMapper saleMapper;
     private final InvoiceNumberGenerator invoiceNumbers;
@@ -47,15 +50,30 @@ public class SaleCommandServiceImpl implements SaleCommandService {
 
     @Override
     public SaleDetailResponse create(SaleRequest request) {
+        Customer customer = null;
+        if (request.customerId() != null) {
+            customer = customerResolver.customer(request.customerId());
+        } else if (request.paymentMethod() == PaymentMethod.CREDIT) {
+            throw new BusinessException("A registered customer is required for credit sales");
+        }
+
+        String customerName = request.customerName() != null ? request.customerName()
+                : (customer != null ? customer.getName() : null);
+        String customerPhone = request.customerPhone() != null ? request.customerPhone()
+                : (customer != null ? customer.getPhone() : null);
+        String customerPan = request.customerPan() != null ? request.customerPan()
+                : (customer != null ? customer.getPanNumber() : null);
+
         Sale sale = Sale.builder()
                 .invoiceNumber(invoiceNumbers.next())
                 .soldAt(Instant.now())
                 .channel(request.channel() == null ? SaleChannel.POS : request.channel())
                 .taxScheme(request.taxScheme())
                 .paymentMethod(request.paymentMethod())
-                .customerName(request.customerName())
-                .customerPhone(request.customerPhone())
-                .customerPan(request.customerPan())
+                .customer(customer)
+                .customerName(customerName)
+                .customerPhone(customerPhone)
+                .customerPan(customerPan)
                 .discountAmount(request.discountAmount() == null ? BigDecimal.ZERO : request.discountAmount())
                 .remark(request.remark())
                 .build();

@@ -1,5 +1,6 @@
 package io.aygh.sales.entity;
 
+import io.aygh.customer.entity.Customer;
 import io.aygh.shared.entity.BaseEntity;
 import io.aygh.shared.entity.PaymentMethod;
 import io.aygh.shared.entity.PaymentStatus;
@@ -57,9 +58,12 @@ public class Sale extends BaseEntity {
 
     // ── Customer ──────────────────────────────────────────────────────────
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "customer_id")
+    private Customer customer;
+
     /**
-     * Kept on the sale itself rather than pointing at a customer record: most
-     * mart sales are to someone who will never be a record, and a VAT bill needs
+     * Kept on the sale itself for snapshotting: a VAT bill needs
      * the name and PAN as they were given at the till that day.
      */
     @Column(name = "customer_name", length = 150)

@@ -13,6 +13,8 @@ public interface SaleCommandService {
      */
     SaleDetailResponse create(SaleRequest request);
 
-    /** Takes payment against a bill that went out unpaid or part-paid. */
+    /**
+     * Takes payment against a bill that went out unpaid or part-paid.
+     */
     SaleDetailResponse pay(Long saleId, SalePaymentRequest request);
 }
