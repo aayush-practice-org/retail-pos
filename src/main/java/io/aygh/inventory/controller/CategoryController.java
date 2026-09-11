@@ -81,13 +81,6 @@ public class CategoryController {
         return ResponseEntity.ok(ApiResponse.ok("Category updated", categoryCommandService.update(id, request)));
     }
 
-    @Operation(summary = "Remove an empty category")
-    @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
-        categoryCommandService.delete(id);
-        return ResponseEntity.ok(ApiResponse.ok("Category removed"));
-    }
-
     // ── Unit policy ───────────────────────────────────────────────────────
 
     @Operation(summary = "Permit a unit for buying or selling in this category")

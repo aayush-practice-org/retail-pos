@@ -6,9 +6,13 @@ import io.aygh.vendor.dto.response.VendorBalanceResponse;
 
 public interface VendorBalanceCommandService {
 
-    /** Posts a payable or a receivable. Rejects a settlement — that has its own path. */
+    /**
+     * Posts a payable or a receivable. Rejects a settlement — that has its own path.
+     */
     VendorBalanceResponse post(Long vendorId, VendorLedgerEntryRequest request);
 
-    /** Records money paid to the vendor. */
+    /**
+     * Records money paid to the vendor.
+     */
     VendorBalanceResponse settle(Long vendorId, VendorSettlementRequest request);
 }

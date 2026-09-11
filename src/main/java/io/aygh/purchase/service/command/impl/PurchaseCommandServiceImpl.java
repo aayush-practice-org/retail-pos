@@ -1,3 +1,4 @@
+
 package io.aygh.purchase.service.command.impl;
 
 import io.aygh.exception.BusinessException;
@@ -30,14 +31,19 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Recording a purchase is four things at once — a bill, stock on the shelf, a
- * vendor's balance and a vendor's trail — and they are only ever right together.
- * One transaction covers all of it: a purchase that fails on its last line
- * leaves no stock behind and no payable raised.
+ * Records a purchase and its related effects:
+ * <ul>
+ *     <li>Purchase document</li>
+ *     <li>Stock movement</li>
+ *     <li>Vendor history</li>
+ *     <li>Vendor payable balance</li>
+ * </ul>
+ * <p>
+ * All operations happen inside one transaction so the purchase and its
+ * side-effects either succeed together or roll back together.
  */
 @Service
 @RequiredArgsConstructor
@@ -46,112 +52,275 @@ import java.util.List;
 public class PurchaseCommandServiceImpl implements PurchaseCommandService {
 
     private final PurchaseRepository purchaseRepository;
-    private final PurchaseResolver resolver;
-    private final PurchaseCalculator calculator;
+
+    private final PurchaseResolver purchaseResolver;
+    private final PurchaseCalculator purchaseCalculator;
     private final PurchaseMapper purchaseMapper;
 
     private final VendorResolver vendorResolver;
     private final VendorBalanceCommandService vendorBalanceCommandService;
     private final VendorHistoryCommandService vendorHistoryCommandService;
+
     private final StockLedgerService stockLedger;
+
+
+    // -------------------------------------------------------------------------
+    // Create Purchase
+    // -------------------------------------------------------------------------
 
     @Override
     public PurchaseDetailResponse create(PurchaseRequest request) {
-        Vendor vendor = vendorResolver.vendor(request.vendorId());
-        LocalDate purchaseDate = request.purchaseDate() == null ? LocalDate.now() : request.purchaseDate();
 
-        requireBillNumberUnused(request.billNumber(), vendor.getId());
+        Vendor vendor = resolveVendor(request);
+        validateBillNumber(request, vendor);
 
-        Purchase purchase = Purchase.builder()
+        Purchase purchase = buildPurchase(request, vendor);
+
+        addItems(purchase, request.items());
+        calculateTotals(purchase);
+        validatePurchase(purchase);
+
+        Purchase savedPurchase = savePurchase(purchase);
+
+        postStockMovements(savedPurchase);
+        recordVendorHistory(savedPurchase);
+        updateVendorBalance(savedPurchase);
+
+        logPurchase(savedPurchase, vendor);
+
+        return purchaseMapper.toDetail(savedPurchase);
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Vendor
+    // -------------------------------------------------------------------------
+
+    private Vendor resolveVendor(PurchaseRequest request) {
+        return vendorResolver.vendor(request.vendorId());
+    }
+
+    private void validateBillNumber(PurchaseRequest request, Vendor vendor) {
+
+        if (purchaseRepository.existsByVendorIdAndBillNumberIgnoreCase(
+                vendor.getId(),
+                request.billNumber())) {
+
+            throw new BusinessException(
+                    "Bill '" + request.billNumber()
+                            + "' is already recorded against this vendor"
+            );
+        }
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Purchase
+    // -------------------------------------------------------------------------
+
+    private Purchase buildPurchase(
+            PurchaseRequest request,
+            Vendor vendor) {
+
+        return Purchase.builder()
                 .vendor(vendor)
                 .billNumber(request.billNumber())
-                .purchaseDate(purchaseDate)
+                .purchaseDate(resolvePurchaseDate(request))
                 .paymentMethod(request.paymentMethod())
                 .taxScheme(request.taxScheme())
-                .discountAmount(request.discountAmount() == null ? BigDecimal.ZERO : request.discountAmount())
+                .discountAmount(resolveDiscount(request))
                 .remark(request.remark())
                 .build();
+    }
 
-        List<PurchaseItem> items = new ArrayList<>();
-        for (PurchaseItemRequest line : request.items()) {
-            PurchaseItem item = buildItem(line);
+    private LocalDate resolvePurchaseDate(PurchaseRequest request) {
+        return request.purchaseDate() != null
+                ? request.purchaseDate()
+                : LocalDate.now();
+    }
+
+    private BigDecimal resolveDiscount(PurchaseRequest request) {
+        return request.discountAmount() != null
+                ? request.discountAmount()
+                : BigDecimal.ZERO;
+    }
+
+    private void addItems(
+            Purchase purchase,
+            List<PurchaseItemRequest> itemRequests) {
+
+        for (PurchaseItemRequest request : itemRequests) {
+            PurchaseItem item = buildItem(request);
             purchase.addItem(item);
-            items.add(item);
+        }
+    }
+
+    private void calculateTotals(Purchase purchase) {
+
+        purchaseCalculator.applyTotals(
+                purchase,
+                purchase.getItems()
+        );
+    }
+
+    private void validatePurchase(Purchase purchase) {
+
+        if (purchase.getDiscountAmount()
+                .compareTo(purchase.getSubTotal()) > 0) {
+
+            throw new BusinessException(
+                    "The discount is more than the goods came to"
+            );
+        }
+    }
+
+    private Purchase savePurchase(Purchase purchase) {
+        return purchaseRepository.save(purchase);
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Purchase Item
+    // -------------------------------------------------------------------------
+
+    private PurchaseItem buildItem(PurchaseItemRequest request) {
+
+        Product product = purchaseResolver.product(
+                request.productId()
+        );
+
+        ProductPurchaseUnit purchaseUnit =
+                purchaseResolver.purchaseUnit(
+                        product.getId(),
+                        request.purchaseUnitId()
+                );
+
+        BigDecimal rate = resolveRate(request, purchaseUnit, product);
+        BigDecimal packQuantity = resolvePackQuantity(
+                purchaseUnit,
+                product
+        );
+
+        BigDecimal quantity = request.quantity();
+
+        return PurchaseItem.builder()
+                .product(product)
+                .purchaseUnit(purchaseUnit)
+                .quantity(quantity)
+                .packQuantity(packQuantity)
+                .quantityInBaseUnits(
+                        quantity.multiply(packQuantity)
+                )
+                .rate(rate)
+                .lineTotal(
+                        quantity
+                                .multiply(rate)
+                                .setScale(2, RoundingMode.HALF_UP)
+                )
+                .build();
+    }
+
+    private BigDecimal resolveRate(
+            PurchaseItemRequest request,
+            ProductPurchaseUnit purchaseUnit,
+            Product product) {
+
+        BigDecimal rate = request.rate() != null
+                ? request.rate()
+                : purchaseUnit.getPurchasePrice();
+
+        if (rate == null) {
+            throw new BusinessException(
+                    "No rate given for '" + product.getName()
+                            + "', and its purchase unit has no price set"
+            );
         }
 
-        calculator.applyTotals(purchase, items);
+        return rate;
+    }
 
-        if (purchase.getDiscountAmount().compareTo(purchase.getSubTotal()) > 0) {
-            throw new BusinessException("The discount is more than the goods came to");
+    private BigDecimal resolvePackQuantity(
+            ProductPurchaseUnit purchaseUnit,
+            Product product) {
+
+        BigDecimal packQuantity = purchaseUnit.getPackQuantity();
+
+        if (packQuantity == null || packQuantity.signum() <= 0) {
+            throw new BusinessException(
+                    "'" + purchaseUnit.getUnit().getName()
+                            + "' on '" + product.getName()
+                            + "' has no pack quantity, so the stock it adds "
+                            + "cannot be worked out"
+            );
         }
 
-        Purchase saved = purchaseRepository.save(purchase);
+        return packQuantity;
+    }
 
-        // Stock only after the purchase has an id: every movement points back at
-        // the document that caused it, and a null reference would orphan the trail.
-        for (PurchaseItem item : saved.getItems()) {
+
+    // -------------------------------------------------------------------------
+    // Stock
+    // -------------------------------------------------------------------------
+
+    private void postStockMovements(Purchase purchase) {
+
+        for (PurchaseItem item : purchase.getItems()) {
+
             stockLedger.post(
                     item.getProduct(),
                     StockMovementType.PURCHASE_IN,
                     item.getQuantityInBaseUnits(),
                     item.getQuantity(),
                     item.getPurchaseUnit().getUnit(),
-                    saved.getId(),
+                    purchase.getId(),
                     StockReferenceType.PURCHASE,
-                    "Purchase bill " + saved.getBillNumber());
+                    "Purchase bill " + purchase.getBillNumber()
+            );
         }
-
-        vendorHistoryCommandService.record(vendor.getId(), saved.getId());
-
-        // Anything but credit was settled at the counter and leaves the vendor's
-        // account where it was; a payable would have to be settled again to clear.
-        if (saved.isOnCredit()) {
-            vendorBalanceCommandService.post(vendor.getId(),
-                    new VendorLedgerEntryRequest(saved.getNetTotal(), BalanceType.PAYABLE));
-        }
-
-        log.info("Recorded purchase {} from '{}' — {} line(s), net {}",
-                saved.getBillNumber(), vendor.getName(), saved.getItems().size(), saved.getNetTotal());
-
-        return purchaseMapper.toDetail(saved);
     }
 
-    private PurchaseItem buildItem(PurchaseItemRequest line) {
-        Product product = resolver.product(line.productId());
-        ProductPurchaseUnit unit = resolver.purchaseUnit(product.getId(), line.purchaseUnitId());
 
-        BigDecimal rate = line.rate() != null ? line.rate() : unit.getPurchasePrice();
-        if (rate == null) {
-            throw new BusinessException("No rate given for '" + product.getName()
-                    + "', and its purchase unit has no price set");
-        }
+    // -------------------------------------------------------------------------
+    // Vendor
+    // -------------------------------------------------------------------------
 
-        // Copied, not referenced: editing the catalogue's pack quantity later must
-        // not restate how much this bill actually put on the shelf.
-        BigDecimal packQuantity = unit.getPackQuantity();
-        if (packQuantity == null || packQuantity.signum() <= 0) {
-            throw new BusinessException("'" + unit.getUnit().getName() + "' on '" + product.getName()
-                    + "' has no pack quantity, so the stock it adds cannot be worked out");
-        }
-
-        return PurchaseItem.builder()
-                .product(product)
-                .purchaseUnit(unit)
-                .quantity(line.quantity())
-                .packQuantity(packQuantity)
-                .quantityInBaseUnits(line.quantity().multiply(packQuantity))
-                .rate(rate)
-                .lineTotal(line.quantity().multiply(rate).setScale(2, RoundingMode.HALF_UP))
-                .build();
+    private void recordVendorHistory(Purchase purchase) {
+        vendorHistoryCommandService.record(
+                purchase.getVendor().getId(),
+                purchase.getId()
+        );
     }
 
-    /**
-     * Re-keying the same bill is the commonest data-entry mistake there is, and
-     * it doubles both the stock and what the vendor is owed.
-     */
-    private void requireBillNumberUnused(String billNumber, Long vendorId) {
-        if (purchaseRepository.existsByVendorIdAndBillNumberIgnoreCase(vendorId, billNumber)) {
-            throw new BusinessException("Bill '" + billNumber + "' is already recorded against this vendor");
+    private void updateVendorBalance(Purchase purchase) {
+
+        if (!purchase.isOnCredit()) {
+            return;
         }
+
+        vendorBalanceCommandService.post(
+                purchase.getVendor().getId(),
+                new VendorLedgerEntryRequest(
+                        purchase.getNetTotal(),
+                        BalanceType.PAYABLE
+                )
+        );
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Logging
+    // -------------------------------------------------------------------------
+
+    private void logPurchase(
+            Purchase purchase,
+            Vendor vendor) {
+
+        log.info(
+                "Recorded purchase {} from '{}' — {} line(s), net {}",
+                purchase.getBillNumber(),
+                vendor.getName(),
+                purchase.getItems().size(),
+                purchase.getNetTotal()
+        );
     }
 }

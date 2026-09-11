@@ -16,7 +16,6 @@ public class UnitResponse extends BaseResponse {
     private String name;
     private String symbol;
     private MeasurementType measurementType;
-    private BigDecimal conversionFactor;
     private boolean referenceUnit;
 
     /** Seeded units are read-only; the UI uses this to hide the edit control. */

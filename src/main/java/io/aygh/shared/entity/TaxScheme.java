@@ -9,9 +9,13 @@ package io.aygh.shared.entity;
  */
 public enum TaxScheme {
 
-    /** VAT is worked out on the taxable amount and shown as its own line. */
+    /**
+     * VAT is worked out on the taxable amount and shown as its own line.
+     */
     VAT,
 
-    /** No VAT line. The prices are all there is. */
+    /**
+     * No VAT line. The prices are all there is.
+     */
     NON_VAT
 }

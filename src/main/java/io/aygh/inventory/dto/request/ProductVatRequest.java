@@ -17,9 +17,6 @@ public record ProductVatRequest(
         @NotNull(message = "Rate is required")
         @DecimalMin(value = "0.00", message = "Rate cannot be negative")
         @DecimalMax(value = "100.00", message = "Rate cannot exceed 100%")
-        BigDecimal rate,
-
-        /** Defaults to today when omitted. */
-        LocalDate effectiveFrom
+        BigDecimal rate
 ) {
 }

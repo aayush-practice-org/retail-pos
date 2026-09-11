@@ -135,9 +135,6 @@ public class InventoryValidation {
         if (!unit.isReferenceUnit()) {
             log.debug("Base unit '{}' is not the reference unit of {}", unit.getName(), unit.getMeasurementType());
         }
-        if (unit.getConversionFactor() == null || unit.getConversionFactor().signum() <= 0) {
-            throw new BusinessException("'" + unit.getName() + "' has no usable conversion factor");
-        }
     }
 
     // ── Trading configuration ─────────────────────────────────────────────

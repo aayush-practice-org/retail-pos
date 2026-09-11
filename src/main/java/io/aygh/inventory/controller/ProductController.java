@@ -98,13 +98,6 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.ok("Product updated", productCommandService.update(id, request)));
     }
 
-    @Operation(summary = "Retire a product")
-    @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
-        productCommandService.delete(id);
-        return ResponseEntity.ok(ApiResponse.ok("Product retired"));
-    }
-
     // ── How the product is bought ─────────────────────────────────────────
 
     @Operation(summary = "Configure how this product is bought")

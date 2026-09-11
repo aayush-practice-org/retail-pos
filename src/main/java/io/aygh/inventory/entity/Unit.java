@@ -45,17 +45,6 @@ public class Unit extends BaseEntity {
     private MeasurementType measurementType;
 
     /**
-     * How many of this measurement type's reference unit fit in one of these:
-     * Kilogram carries 1000 against a Gram reference. Only meaningful for units
-     * with a fixed size — a Sack holds whatever the product says it holds, so
-     * it carries 1 here and defers to
-     * {@link ProductPurchaseUnit#getPackQuantity()}.
-     */
-    @Column(name = "conversion_factor", nullable = false, precision = 19, scale = 6)
-    @Builder.Default
-    private BigDecimal conversionFactor = BigDecimal.ONE;
-
-    /**
      * True for the one unit each measurement type is expressed in.
      */
     @Column(name = "reference_unit", nullable = false)

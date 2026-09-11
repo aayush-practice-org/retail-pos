@@ -3,28 +3,25 @@ package io.aygh.stock.helper;
 import io.aygh.exception.BusinessException;
 import io.aygh.inventory.entity.Product;
 import io.aygh.inventory.entity.Unit;
+import io.aygh.inventory.repository.ProductPurchaseUnitRepository;
+import io.aygh.inventory.repository.ProductSellingUnitRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.math.MathContext;
 
 /**
  * Turning what someone typed into the base units the ledger is kept in.
  * <p>
- * Two different conversions live in the mart and they are not interchangeable:
- * <ul>
- *   <li>a <em>trading</em> unit — a purchase or selling unit — carries its own
- *       {@code packQuantity}, because a Sack holds whatever that product says it
- *       holds. Purchases and sales convert through that, not through here;</li>
- *   <li>a <em>dictionary</em> unit — Kilogram, Litre — has a fixed size against
- *       the reference unit of its measurement type. That is what this converts,
- *       and it is what a stock count or a write-off is entered in.</li>
- * </ul>
+ * If entered in the base unit, passes through as-is.
+ * Otherwise, converts using the product's configured pack quantity for that unit.
  */
 @Component
 @RequiredArgsConstructor
 public class StockConversion {
+
+    private final ProductPurchaseUnitRepository purchaseUnitRepository;
+    private final ProductSellingUnitRepository sellingUnitRepository;
 
     /**
      * {@code quantity} of {@code enteredUnit}, expressed in {@code product}'s base
@@ -37,21 +34,20 @@ public class StockConversion {
             return quantity;
         }
 
-        if (enteredUnit.getMeasurementType() != baseUnit.getMeasurementType()) {
-            throw new BusinessException("'" + enteredUnit.getName() + "' measures "
-                    + enteredUnit.getMeasurementType() + ", but '" + product.getName()
-                    + "' is counted in " + baseUnit.getMeasurementType());
+        // Try product purchase unit configuration
+        var purchaseUnit = purchaseUnitRepository.findByProductIdAndUnitId(product.getId(), enteredUnit.getId());
+        if (purchaseUnit.isPresent()) {
+            return quantity.multiply(purchaseUnit.get().getPackQuantity());
         }
 
-        BigDecimal from = enteredUnit.getConversionFactor();
-        BigDecimal to = baseUnit.getConversionFactor();
-        if (from == null || from.signum() <= 0 || to == null || to.signum() <= 0) {
-            throw new BusinessException("'" + enteredUnit.getName()
-                    + "' has no usable conversion factor against '" + baseUnit.getName() + "'");
+        // Try product selling unit configuration
+        var sellingUnit = sellingUnitRepository.findByProductIdAndUnitId(product.getId(), enteredUnit.getId());
+        if (sellingUnit.isPresent()) {
+            return quantity.multiply(sellingUnit.get().getPackQuantity());
         }
 
-        // Both factors are against the same measurement type's reference unit, so
-        // their ratio is the conversion — no reference row has to be looked up.
-        return quantity.multiply(from).divide(to, MathContext.DECIMAL64);
+        throw new BusinessException("'" + enteredUnit.getName() + "' is not configured for '"
+                + product.getName() + "'. Adjustments must be in the base unit ('"
+                + baseUnit.getName() + "') or a configured purchase/selling unit");
     }
 }

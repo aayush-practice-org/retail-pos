@@ -39,15 +39,4 @@ public class ProductPurchaseVat extends BaseEntity {
     @Column(name = "rate", nullable = false, precision = 5, scale = 2)
     private BigDecimal rate;
 
-    @Column(name = "effective_from", nullable = false)
-    private LocalDate effectiveFrom;
-
-    /** Open-ended while this is the rate in force. */
-    @Column(name = "effective_to")
-    private LocalDate effectiveTo;
-
-    public boolean appliesOn(LocalDate date) {
-        return !date.isBefore(effectiveFrom)
-                && (effectiveTo == null || !date.isAfter(effectiveTo));
-    }
 }

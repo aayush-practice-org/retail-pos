@@ -83,9 +83,11 @@ public class PurchaseCalculator {
         return total.setScale(MONEY_SCALE, RoundingMode.HALF_UP);
     }
 
-    /** Zero when the purchase unit has no rate on that date — not every good is taxed. */
+    /**
+     * Zero when the purchase unit has no rate — not every good is taxed.
+     */
     private BigDecimal rateFor(PurchaseItem item, LocalDate on) {
-        return vatRepository.findEffectiveOn(item.getPurchaseUnit().getId(), on)
+        return vatRepository.findTopByProductPurchaseUnitIdOrderByCreatedAtDesc(item.getPurchaseUnit().getId())
                 .map(ProductPurchaseVat::getRate)
                 .orElse(BigDecimal.ZERO);
     }

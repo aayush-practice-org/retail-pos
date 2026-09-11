@@ -85,14 +85,6 @@ public class ProductCommandServiceImpl implements ProductCommandService {
         return productMapper.toSummary(saved);
     }
 
-    @Override
-    public void delete(Long id) {
-        Product product = resolver.product(id);
-
-        productRepository.delete(product);
-        log.info("Retired product '{}'", product.getName());
-    }
-
     // ── How the product is bought ─────────────────────────────────────────
 
     @Override
@@ -167,21 +159,12 @@ public class ProductCommandServiceImpl implements ProductCommandService {
      * it — so it is forbidden here, on the one path that creates them.
      */
     private void openVatRate(ProductPurchaseUnit purchaseUnit, ProductVatRequest request) {
-        LocalDate from = request.effectiveFrom() == null ? LocalDate.now() : request.effectiveFrom();
-
-        vatRepository.findByProductPurchaseUnitIdAndEffectiveToIsNull(purchaseUnit.getId())
-                .ifPresent(current -> {
-                    current.setEffectiveTo(from.minusDays(1));
-                    vatRepository.save(current);
-                });
-
-        vatRepository.save(ProductPurchaseVat.builder()
+        ProductPurchaseVat vat = vatRepository.save(ProductPurchaseVat.builder()
                 .productPurchaseUnit(purchaseUnit)
                 .rate(request.rate())
-                .effectiveFrom(from)
                 .build());
-
-        log.info("VAT on purchase unit {} is {}% from {}", purchaseUnit.getId(), request.rate(), from);
+        purchaseUnit.addVatRate(vat);
+        log.info("VAT on purchase unit {} set to {}%", purchaseUnit.getId(), request.rate());
     }
 
     // ── How the product is sold ───────────────────────────────────────────

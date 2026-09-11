@@ -17,7 +17,6 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
 
-import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -42,16 +41,15 @@ public interface ProductUnitMapper {
     ProductPurchaseUnitDetailResponse toDetail(ProductPurchaseUnit purchaseUnit);
 
     /**
-     * Flattens the open rate onto the row. Read from the loaded collection rather
+     * Flattens the active rate onto the row. Read from the loaded collection rather
      * than queried, because every caller of this has already fetched it.
      */
     @AfterMapping
     default void fillCurrentVat(ProductPurchaseUnit source, @MappingTarget ProductPurchaseUnitResponse target) {
-        LocalDate today = LocalDate.now();
-        source.getVatRates().stream()
-                .filter(rate -> rate.appliesOn(today))
-                .findFirst()
-                .ifPresent(rate -> target.setCurrentVatRate(rate.getRate()));
+        if (source.getVatRates() != null && !source.getVatRates().isEmpty()) {
+            ProductPurchaseVat latest = source.getVatRates().get(source.getVatRates().size() - 1);
+            target.setCurrentVatRate(latest.getRate());
+        }
     }
 
     @Mapping(target = "id", ignore = true)

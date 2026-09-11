@@ -60,7 +60,9 @@ public class InvoiceController {
         return pdf(body, sale.invoiceNumber() + "-receipt.pdf");
     }
 
-    /** Inline, so a click opens the document rather than downloading it. */
+    /**
+     * Inline, so a click opens the document rather than downloading it.
+     */
     private ResponseEntity<byte[]> pdf(byte[] body, String filename) {
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)

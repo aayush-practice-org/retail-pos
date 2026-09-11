@@ -23,11 +23,6 @@ public record UnitRequest(
         String symbol,
 
         @NotNull(message = "Measurement type is required")
-        MeasurementType measurementType,
-
-        /** Against the reference unit of the same type. 1 for units with no fixed size. */
-        @NotNull(message = "Conversion factor is required")
-        @DecimalMin(value = "0.000001", message = "Conversion factor must be greater than zero")
-        BigDecimal conversionFactor
+        MeasurementType measurementType
 ) {
 }

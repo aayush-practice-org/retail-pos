@@ -19,8 +19,6 @@ public interface ProductCommandService {
 
     ProductSummaryResponse update(Long id, ProductUpdateRequest request);
 
-    void delete(Long id);
-
     // ── How the product is bought ─────────────────────────────────────────
 
     ProductPurchaseUnitDetailResponse addPurchaseUnit(Long productId, ProductPurchaseUnitCreateRequest request);

@@ -25,6 +25,8 @@ public interface ProductPurchaseUnitRepository extends JpaRepository<ProductPurc
 
     Optional<ProductPurchaseUnit> findByIdAndProductId(Long id, Long productId);
 
+    Optional<ProductPurchaseUnit> findByProductIdAndUnitId(Long productId, Long unitId);
+
     boolean existsByProductIdAndUnitId(Long productId, Long unitId);
 
     boolean existsByProductIdAndUnitIdAndIdNot(Long productId, Long unitId, Long id);
