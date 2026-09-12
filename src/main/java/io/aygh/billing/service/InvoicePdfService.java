@@ -224,6 +224,14 @@ public class InvoicePdfService {
                 PosText.drawCentered(cs, FONT_BOLD, titleSize, title, y, margin, contentWidth);
                 y -= (titleSize * 0.35f + 4f);
 
+                int printNumber = Math.max(1, sale.printCount() != null ? sale.printCount() : 1);
+                if (printNumber > 1) {
+                    y -= (subtitleSize * ASCENT_RATIO + 2f);
+                    PosText.drawCentered(cs, FONT_BOLD, subtitleSize,
+                            "COPY OF ORIGINAL (" + printNumber + ")", y, margin, contentWidth);
+                    y -= (subtitleSize * 0.35f + 4f);
+                }
+
                 y -= 2f;
                 cs.setLineWidth(DIVIDER_THICKNESS);
                 cs.moveTo(margin, y);
@@ -253,6 +261,7 @@ public class InvoicePdfService {
                 String txnDate = notBlank(sale.nepaliDate()) ? sale.nepaliDate() : formatInstant(sale.soldAt());
                 yR = drawPageTaxField(cs, rightX, yR, "Transactions Date", txnDate, labelSize, bodySize);
                 yR = drawPageTaxField(cs, rightX, yR, "Invoice Issue Date", txnDate, labelSize, bodySize);
+                yR = drawPageTaxField(cs, rightX, yR, "Print Count", String.valueOf(printNumber), labelSize, bodySize);
                 yR = drawPageTaxField(cs, rightX, yR, "Payment Status", String.valueOf(sale.paymentStatus()), labelSize, bodySize);
 
                 y = Math.min(yL, yR) - sectionGap / 2;
@@ -528,21 +537,7 @@ public class InvoicePdfService {
     }
 
     private String resolveBookDuration(SalesBookResponse book) {
-        if (notBlank(book.duration())) {
-            return book.duration();
-        }
-        boolean hasMonth = notBlank(book.month());
-        boolean hasYear = notBlank(book.year());
-        if (hasMonth && hasYear) {
-            return "Month " + book.month() + "   Year " + book.year();
-        }
-        if (hasMonth) {
-            return "Month " + book.month();
-        }
-        if (hasYear) {
-            return "Year " + book.year();
-        }
-        return "\u2014";
+        return notBlank(book.duration()) ? book.duration() : "\u2014";
     }
 
     private float drawSalesBookTableHead(PDPageContentStream cs, float y, float[] xs, float[] bandXs)
@@ -687,6 +682,8 @@ public class InvoicePdfService {
         float height = layout.lineHeight() * 2;
         if (contactLine(branding) != null) height += layout.lineHeight();
         if (notBlank(branding.registrationNumber())) height += layout.lineHeight();
+        int printNumber = Math.max(1, sale.printCount() != null ? sale.printCount() : 1);
+        if (printNumber > 1) height += layout.lineHeight() * 2;
         height += layout.dividerGap() * 2;
         height += layout.lineHeight() * 2;
         if (notBlank(sale.nepaliDate())) height += layout.lineHeight();
@@ -745,9 +742,16 @@ public class InvoicePdfService {
             y -= layout.lineHeight();
         }
 
+        int printNumber = Math.max(1, sale.printCount() != null ? sale.printCount() : 1);
         PosText.drawCentered(cs, FONT_BOLD, layout.subtitleSize(), documentTitle(sale),
                 y, layout.margin(), layout.contentWidth());
         y -= layout.lineHeight();
+
+        if (printNumber > 1) {
+            PosText.drawCentered(cs, FONT_BOLD, layout.subtitleSize(),
+                    "COPY OF ORIGINAL (" + printNumber + ")", y, layout.margin(), layout.contentWidth());
+            y -= layout.lineHeight();
+        }
 
         y = PosText.drawDashedDivider(cs, layout, y, 0.5f);
 
@@ -758,6 +762,12 @@ public class InvoicePdfService {
         PosText.drawRightAligned(cs, FONT_REGULAR, layout.smallSize(),
                 String.valueOf(sale.paymentMethod()), layout.contentRight(), y);
         y -= layout.lineHeight();
+
+        if (printNumber > 1) {
+            PosText.drawAt(cs, FONT_REGULAR, layout.smallSize(),
+                    "Print Count: " + printNumber, layout.margin(), y);
+            y -= layout.lineHeight();
+        }
 
         if (notBlank(sale.nepaliDate())) {
             String bsLine = "BS: " + sale.nepaliDate()

@@ -2,7 +2,6 @@ package io.aygh.sales.dto.request;
 
 import io.aygh.sales.entity.SaleChannel;
 import io.aygh.shared.entity.PaymentMethod;
-import io.aygh.shared.entity.TaxScheme;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 
@@ -15,11 +14,11 @@ import java.util.List;
  * No totals are accepted from the caller: everything but the discounts is worked
  * out server-side from the lines, so a till that computes its own total can
  * never put a different number on the bill than the one in the books.
+ * <p>
+ * The tax scheme (VAT / non-VAT) is derived automatically from the tenant's
+ * CBMS configuration — the caller does not send it.
  */
 public record SaleRequest(
-
-        @NotNull(message = "Tax scheme is required")
-        TaxScheme taxScheme,
 
         @NotNull(message = "Payment method is required")
         PaymentMethod paymentMethod,

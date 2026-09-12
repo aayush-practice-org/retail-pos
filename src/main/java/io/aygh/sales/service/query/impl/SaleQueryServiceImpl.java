@@ -73,4 +73,15 @@ public class SaleQueryServiceImpl implements SaleQueryService {
         Instant to = DateRange.getEnd(dateRange);
         return saleRepository.totalsBetween(from, to);
     }
+
+    @Transactional
+    @Override
+    public SaleDetailResponse incrementPrintCount(Long id) {
+        Sale sale = resolver.sale(id);
+        int printCount = (sale.getPrintCount() != null ? sale.getPrintCount() : 0) + 1;
+        sale.setPrintCount(printCount);
+        sale.setIsBillPrinted(true);
+        Sale saved = saleRepository.save(sale);
+        return saleMapper.toDetail(saved);
+    }
 }

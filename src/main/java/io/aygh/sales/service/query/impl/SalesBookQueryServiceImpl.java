@@ -10,6 +10,7 @@ import io.aygh.sales.entity.Sale;
 import io.aygh.sales.repository.SaleRepository;
 import io.aygh.sales.service.query.SalesBookQueryService;
 import io.aygh.shared.entity.TaxScheme;
+import io.aygh.shared.response.DateRange;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,7 +21,6 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -30,7 +30,7 @@ import java.util.List;
 public class SalesBookQueryServiceImpl implements SalesBookQueryService {
 
     private static final ZoneId REPORT_ZONE = ZoneId.of("Asia/Kathmandu");
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(REPORT_ZONE);
 
     private final SaleRepository saleRepository;
     private final MartBrandingService martBrandingService;
@@ -38,72 +38,51 @@ public class SalesBookQueryServiceImpl implements SalesBookQueryService {
 
     @Transactional(readOnly = true)
     @Override
-    public SalesBookResponse getSalesBook(Instant start, Instant end, String month, String year) {
+    public SalesBookResponse getSalesBook(DateRange dateRange) {
+        DateRange range = dateRange != null ? dateRange : DateRange.THIS_MONTH;
+        Instant start = range.getStart();
+        Instant end = range.getEnd();
+
         MartBranding branding = martBrandingService.resolve();
         List<Sale> sales = saleRepository.findSalesBookSales(start, end);
+
         List<SalesBookRowResponse> rows = sales.stream()
                 .map(this::toRow)
                 .toList();
 
-        String duration = resolveDuration(start, end, month, year);
+        String duration = formatDuration(range);
 
         return new SalesBookResponse(
                 branding.companyName(),
                 branding.registrationNumber(),
-                month != null && !month.isBlank() ? month : duration,
-                year != null ? year : "",
+                duration,
                 rows,
-                totalOf(rows),
-                duration);
+                totalOf(rows)
+        );
     }
 
     @Transactional(readOnly = true)
     @Override
-    public byte[] generateSalesBookPdf(Instant start, Instant end, String month, String year) {
-        return invoicePdfService.generateSalesBook(getSalesBook(start, end, month, year));
+    public byte[] generateSalesBookPdf(DateRange dateRange) {
+        return invoicePdfService.generateSalesBook(getSalesBook(dateRange));
     }
 
-    private String resolveDuration(Instant start, Instant end, String month, String year) {
-        boolean hasMonth = month != null && !month.isBlank();
-        boolean hasYear = year != null && !year.isBlank();
-        if (hasMonth && hasYear) {
-            return "Month " + month + "   Year " + year;
+    private String formatDuration(DateRange dateRange) {
+        if (dateRange == DateRange.ALL_TIME) {
+            return "All Time";
         }
-        if (hasMonth) {
-            return "Month " + month;
+        LocalDate start = dateRange.getStartDate();
+        LocalDate end = dateRange.getEndDate();
+        if (start.equals(end)) {
+            return DATE_FMT.format(start);
         }
-        if (hasYear) {
-            return "Year " + year;
-        }
-        if (start != null && end != null) {
-            LocalDate startDate = start.atZone(ZoneOffset.UTC).toLocalDate();
-            LocalDate endDate = end.atZone(ZoneOffset.UTC).toLocalDate();
-            if (startDate.getYear() <= 1970) {
-                return "All Time";
-            }
-            if (startDate.equals(endDate)) {
-                return DATE_FMT.format(startDate);
-            }
-            return DATE_FMT.format(startDate) + " to " + DATE_FMT.format(endDate);
-        } else if (start != null) {
-            LocalDate startDate = start.atZone(ZoneOffset.UTC).toLocalDate();
-            if (startDate.getYear() <= 1970) {
-                return "All Time";
-            }
-            return "From " + DATE_FMT.format(startDate);
-        } else if (end != null) {
-            LocalDate endDate = end.atZone(ZoneOffset.UTC).toLocalDate();
-            return "Up to " + DATE_FMT.format(endDate);
-        }
-        return "\u2014";
+        return DATE_FMT.format(start) + " to " + DATE_FMT.format(end);
     }
 
     private SalesBookRowResponse toRow(Sale sale) {
         BigDecimal tax = zeroIfNull(sale.getVatAmount());
         boolean vatCharged = sale.getTaxScheme() == TaxScheme.VAT && tax.compareTo(BigDecimal.ZERO) > 0;
 
-        // A bill lands in taxable columns when VAT was charged;
-        // Non-VAT sales land in non-taxable sales.
         BigDecimal taxable = vatCharged ? zeroIfNull(sale.getTaxableAmount()) : BigDecimal.ZERO;
         BigDecimal nonTaxable = vatCharged ? BigDecimal.ZERO : zeroIfNull(sale.getNetTotal());
 
@@ -117,7 +96,8 @@ public class SalesBookQueryServiceImpl implements SalesBookQueryService {
                 BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
                 zeroIfNull(sale.getDiscountAmount()),
                 taxable,
-                tax);
+                tax
+        );
     }
 
     private String billDate(Sale sale) {
@@ -126,7 +106,7 @@ public class SalesBookQueryServiceImpl implements SalesBookQueryService {
             return nepaliDate;
         }
         Instant at = sale.getSoldAt();
-        return at == null ? null : DATE_FMT.format(at.atZone(REPORT_ZONE));
+        return at == null ? null : DATE_FMT.format(at);
     }
 
     private SalesBookTotalResponse totalOf(List<SalesBookRowResponse> rows) {
@@ -136,7 +116,8 @@ public class SalesBookQueryServiceImpl implements SalesBookQueryService {
                 sum(rows, SalesBookRowResponse::exportSales),
                 sum(rows, SalesBookRowResponse::discount),
                 sum(rows, SalesBookRowResponse::taxableAmount),
-                sum(rows, SalesBookRowResponse::tax));
+                sum(rows, SalesBookRowResponse::tax)
+        );
     }
 
     private BigDecimal sum(List<SalesBookRowResponse> rows,

@@ -68,6 +68,8 @@ public class SaleMapper {
                 sale.getChangeAmount(),
                 sale.dueAmount(),
                 sale.getRemark(),
+                sale.getPrintCount() != null ? sale.getPrintCount() : 0,
+                sale.getIsBillPrinted() != null ? sale.getIsBillPrinted() : false,
                 items);
     }
 

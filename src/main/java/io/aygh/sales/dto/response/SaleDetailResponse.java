@@ -40,6 +40,8 @@ public record SaleDetailResponse(
         BigDecimal dueAmount,
 
         String remark,
+        Integer printCount,
+        Boolean isBillPrinted,
         List<SaleItemResponse> items
 ) {
 }

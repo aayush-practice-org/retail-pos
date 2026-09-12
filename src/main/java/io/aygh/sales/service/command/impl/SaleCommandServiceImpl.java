@@ -74,7 +74,6 @@ public class SaleCommandServiceImpl implements SaleCommandService {
                 .invoiceNumber(invoiceNumbers.next())
                 .soldAt(now)
                 .channel(request.channel() == null ? SaleChannel.POS : request.channel())
-                .taxScheme(request.taxScheme())
                 .paymentMethod(request.paymentMethod())
                 .customer(customer)
                 .customerName(customerName)

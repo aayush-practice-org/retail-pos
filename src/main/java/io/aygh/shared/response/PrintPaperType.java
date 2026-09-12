@@ -1,5 +1,6 @@
 package io.aygh.shared.response;
 
+import lombok.Getter;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import io.aygh.shared.print.PosPaper;
 
@@ -11,15 +12,12 @@ public enum PrintPaperType {
     A6(null, false);
 
     private final Float posWidthMm;
+    @Getter
     private final boolean pos;
 
     PrintPaperType(Float posWidthMm, boolean pos) {
         this.posWidthMm = posWidthMm;
         this.pos = pos;
-    }
-
-    public boolean isPos() {
-        return pos;
     }
 
     public PosPaper toPosPaper() {

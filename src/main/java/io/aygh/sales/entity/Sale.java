@@ -92,6 +92,19 @@ public class Sale extends BaseEntity {
     @Column(name = "fiscal_year", length = 20)
     private String fiscalYear;
 
+    /**
+     * How many times the IRD invoice for this bill has been printed.
+     * The first print is the original and every one after it is a copy
+     * stamped "COPY OF ORIGINAL (N)".
+     */
+    @Column(name = "print_count", nullable = false)
+    @Builder.Default
+    private Integer printCount = 0;
+
+    @Column(name = "is_bill_printed", nullable = false)
+    @Builder.Default
+    private Boolean isBillPrinted = false;
+
     // ── Money ─────────────────────────────────────────────────────────────
 
     @Column(name = "sub_total", nullable = false, precision = 14, scale = 2)

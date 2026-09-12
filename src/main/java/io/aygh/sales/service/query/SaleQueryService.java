@@ -21,4 +21,6 @@ public interface SaleQueryService {
                                                DateRange dateRange, Pageable pageable);
 
     SalesTotalsResponse totals(DateRange dateRange);
+
+    SaleDetailResponse incrementPrintCount(Long id);
 }

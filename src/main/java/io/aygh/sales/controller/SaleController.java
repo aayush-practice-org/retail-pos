@@ -91,48 +91,18 @@ public class SaleController {
     @Operation(summary = "The IRD sales book for a period: a line per bill and the column totals")
     @GetMapping("/sales-book")
     public ResponseEntity<ApiResponse<SalesBookResponse>> getSalesBook(
-            @RequestParam(required = false, defaultValue = "THIS_MONTH") DateRange dateRange,
-            @RequestParam(required = false) String date,
-            @RequestParam(required = false) String month,
-            @RequestParam(required = false) String year) {
+            @RequestParam(required = false, defaultValue = "THIS_MONTH") DateRange dateRange) {
 
-        Instant start = DateRange.getStart(dateRange);
-        Instant end = DateRange.getEnd(dateRange);
-
-        if (date != null && !date.isBlank()) {
-            try {
-                LocalDate d = LocalDate.parse(date.trim());
-                start = d.atStartOfDay(ZoneOffset.UTC).toInstant();
-                end = d.plusDays(1).atStartOfDay(ZoneOffset.UTC).minusNanos(1).toInstant();
-            } catch (Exception ignored) {
-            }
-        }
-
-        SalesBookResponse salesBook = salesBookQueryService.getSalesBook(start, end, month, year);
-        return ResponseEntity.ok(ApiResponse.ok("Sales book fetched successfully", salesBook));
+        return ResponseEntity.ok(ApiResponse.ok("Sales book fetched successfully",
+                salesBookQueryService.getSalesBook(dateRange)));
     }
 
     @Operation(summary = "The same IRD sales book rendered on the IRD form, as a landscape A4 PDF")
     @GetMapping(value = "/sales-book/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> generateSalesBookPdf(
-            @RequestParam(required = false, defaultValue = "THIS_MONTH") DateRange dateRange,
-            @RequestParam(required = false) String date,
-            @RequestParam(required = false) String month,
-            @RequestParam(required = false) String year) {
+            @RequestParam(required = false, defaultValue = "THIS_MONTH") DateRange dateRange) {
 
-        Instant start = DateRange.getStart(dateRange);
-        Instant end = DateRange.getEnd(dateRange);
-
-        if (date != null && !date.isBlank()) {
-            try {
-                LocalDate d = LocalDate.parse(date.trim());
-                start = d.atStartOfDay(ZoneOffset.UTC).toInstant();
-                end = d.plusDays(1).atStartOfDay(ZoneOffset.UTC).minusNanos(1).toInstant();
-            } catch (Exception ignored) {
-            }
-        }
-
-        byte[] pdfBytes = salesBookQueryService.generateSalesBookPdf(start, end, month, year);
+        byte[] pdfBytes = salesBookQueryService.generateSalesBookPdf(dateRange);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"sales-book.pdf\"")
                 .contentType(MediaType.APPLICATION_PDF)
