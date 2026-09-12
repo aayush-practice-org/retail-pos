@@ -65,7 +65,6 @@ public class CbmsInternalCommandServiceImpl implements CbmsInternalCommandServic
 
         entity.setCbmsUsername(request.cbmsUsername());
         entity.setCbmsPassword(request.cbmsPassword());
-        entity.setTaxRegistration(request.taxRegistration());
         entity.setTaxIncluded(request.taxIncluded());
         entity.setPan(admin.getRegistrationNumber());
 
