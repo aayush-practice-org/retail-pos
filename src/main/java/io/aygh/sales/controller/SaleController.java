@@ -4,9 +4,11 @@ import io.aygh.sales.dto.request.SaleRequest;
 import io.aygh.sales.dto.response.SaleDetailResponse;
 import io.aygh.sales.dto.response.SalesReportSummary;
 import io.aygh.sales.dto.response.SaleSummaryResponse;
+import io.aygh.sales.dto.response.SalesBookResponse;
 import io.aygh.sales.dto.response.SalesTotalsResponse;
 import io.aygh.sales.service.command.SaleCommandService;
 import io.aygh.sales.service.query.SaleQueryService;
+import io.aygh.sales.service.query.SalesBookQueryService;
 import io.aygh.shared.entity.PaymentStatus;
 import io.aygh.shared.response.ApiResponse;
 import io.aygh.shared.response.DateRange;
@@ -17,10 +19,16 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 
 /**
  * Bills raised and the stock they move.
@@ -43,6 +51,7 @@ public class SaleController {
 
     private final SaleCommandService saleCommandService;
     private final SaleQueryService saleQueryService;
+    private final SalesBookQueryService salesBookQueryService;
 
     @Operation(summary = "Ring up a basket — raises the bill and takes the stock off the shelf")
     @PostMapping
@@ -77,6 +86,57 @@ public class SaleController {
             @RequestParam(defaultValue = "THIS_MONTH") DateRange dateRange) {
 
         return ResponseEntity.ok(ApiResponse.ok(saleQueryService.salesReport(dateRange)));
+    }
+
+    @Operation(summary = "The IRD sales book for a period: a line per bill and the column totals")
+    @GetMapping("/sales-book")
+    public ResponseEntity<ApiResponse<SalesBookResponse>> getSalesBook(
+            @RequestParam(required = false, defaultValue = "THIS_MONTH") DateRange dateRange,
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) String year) {
+
+        Instant start = DateRange.getStart(dateRange);
+        Instant end = DateRange.getEnd(dateRange);
+
+        if (date != null && !date.isBlank()) {
+            try {
+                LocalDate d = LocalDate.parse(date.trim());
+                start = d.atStartOfDay(ZoneOffset.UTC).toInstant();
+                end = d.plusDays(1).atStartOfDay(ZoneOffset.UTC).minusNanos(1).toInstant();
+            } catch (Exception ignored) {
+            }
+        }
+
+        SalesBookResponse salesBook = salesBookQueryService.getSalesBook(start, end, month, year);
+        return ResponseEntity.ok(ApiResponse.ok("Sales book fetched successfully", salesBook));
+    }
+
+    @Operation(summary = "The same IRD sales book rendered on the IRD form, as a landscape A4 PDF")
+    @GetMapping(value = "/sales-book/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> generateSalesBookPdf(
+            @RequestParam(required = false, defaultValue = "THIS_MONTH") DateRange dateRange,
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) String year) {
+
+        Instant start = DateRange.getStart(dateRange);
+        Instant end = DateRange.getEnd(dateRange);
+
+        if (date != null && !date.isBlank()) {
+            try {
+                LocalDate d = LocalDate.parse(date.trim());
+                start = d.atStartOfDay(ZoneOffset.UTC).toInstant();
+                end = d.plusDays(1).atStartOfDay(ZoneOffset.UTC).minusNanos(1).toInstant();
+            } catch (Exception ignored) {
+            }
+        }
+
+        byte[] pdfBytes = salesBookQueryService.generateSalesBookPdf(start, end, month, year);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"sales-book.pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdfBytes);
     }
 
     @Operation(summary = "One bill, lines included")

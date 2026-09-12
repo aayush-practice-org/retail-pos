@@ -119,4 +119,11 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             ORDER BY s.soldAt ASC
             """)
     List<Sale> findUnpaidSalesByCustomerId(@Param("customerId") Long customerId);
+
+    @Query("""
+            SELECT s FROM Sale s
+            WHERE s.soldAt BETWEEN :start AND :end
+            ORDER BY s.soldAt ASC, s.invoiceNumber ASC
+            """)
+    List<Sale> findSalesBookSales(@Param("start") Instant start, @Param("end") Instant end);
 }

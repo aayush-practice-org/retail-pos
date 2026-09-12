@@ -55,6 +55,8 @@ public class SaleMapper {
                 sale.getCustomerName(),
                 sale.getCustomerPhone(),
                 sale.getCustomerPan(),
+                sale.getNepaliDate(),
+                sale.getFiscalYear(),
                 sale.getSubTotal(),
                 sale.getDiscountAmount(),
                 sale.getTaxableAmount(),

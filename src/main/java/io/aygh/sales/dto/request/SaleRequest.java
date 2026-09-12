@@ -44,6 +44,12 @@ public record SaleRequest(
         /** Required on a VAT bill to a registered buyer; the mart decides, not this. */
         @Size(max = 30) String customerPan,
 
+        /**
+         * The BS date the operator entered at the till, e.g. "2081.09.05".
+         * Stored verbatim on the sale for invoice and IRD sales book printing.
+         */
+        @Size(max = 20) String nepaliDate,
+
         @Size(max = 255) String remark,
 
         @NotEmpty(message = "A sale needs at least one item")

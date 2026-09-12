@@ -18,6 +18,7 @@ import io.aygh.sales.mapper.SaleMapper;
 import io.aygh.sales.repository.SaleRepository;
 import io.aygh.sales.service.command.SaleCommandService;
 import io.aygh.shared.entity.PaymentMethod;
+import io.aygh.shared.service.NepaliDateUtils;
 import io.aygh.stock.entity.StockMovementType;
 import io.aygh.stock.entity.StockReferenceType;
 import io.aygh.stock.service.command.StockLedgerService;
@@ -62,9 +63,16 @@ public class SaleCommandServiceImpl implements SaleCommandService {
         String customerPan = request.customerPan() != null ? request.customerPan()
                 : (customer != null ? customer.getPanNumber() : null);
 
+        // Derive the fiscal year: use the client-supplied BS date when present
+        // (the server cannot compute a BS date reliably), otherwise fall back to
+        // deriving it from the UTC instant.
+        Instant now = Instant.now();
+        String nepaliDate = request.nepaliDate();
+        String fiscalYear = NepaliDateUtils.getIrdFiscalYear(now);
+
         Sale sale = Sale.builder()
                 .invoiceNumber(invoiceNumbers.next())
-                .soldAt(Instant.now())
+                .soldAt(now)
                 .channel(request.channel() == null ? SaleChannel.POS : request.channel())
                 .taxScheme(request.taxScheme())
                 .paymentMethod(request.paymentMethod())
@@ -72,6 +80,8 @@ public class SaleCommandServiceImpl implements SaleCommandService {
                 .customerName(customerName)
                 .customerPhone(customerPhone)
                 .customerPan(customerPan)
+                .nepaliDate(nepaliDate)
+                .fiscalYear(fiscalYear)
                 .discountAmount(request.discountAmount() == null ? BigDecimal.ZERO : request.discountAmount())
                 .remark(request.remark())
                 .build();

@@ -22,6 +22,11 @@ public record SaleDetailResponse(
         String customerPhone,
         String customerPan,
 
+        /** BS date entered at the till, e.g. "2081.09.05". May be null for old records. */
+        String nepaliDate,
+        /** IRD fiscal year, e.g. "2081.082". May be null for old records. */
+        String fiscalYear,
+
         BigDecimal subTotal,
         BigDecimal discountAmount,
         BigDecimal taxableAmount,

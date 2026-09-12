@@ -4,6 +4,7 @@ import io.aygh.billing.service.InvoicePdfService;
 import io.aygh.sales.dto.response.SaleDetailResponse;
 import io.aygh.sales.service.query.SaleQueryService;
 import io.aygh.shared.print.PosPaper;
+import io.aygh.shared.response.PrintPaperType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -18,13 +19,7 @@ import org.springframework.web.bind.annotation.*;
 /**
  * The printable copies of a bill.
  * <p>
- * Two renderings of one document: A4 for the copy that gets filed, and a thermal
- * roll for the one handed over. Both are built from the same sale, so they
- * cannot disagree, and both carry the mart's own details — read from the tenant
- * behind the caller's token, never from anything on the request.
- * <p>
- * These return {@code application/pdf} rather than the usual {@code ApiResponse}
- * envelope: the browser has to be able to open the URL and get a document.
+ * Supports both thermal rolls (MM80, MM75) and standard responsive page layouts (A4, A5, A6).
  */
 @Tag(name = "Sales · Invoices", description = "Printable invoices and till receipts.")
 @RestController
@@ -37,18 +32,28 @@ public class InvoiceController {
     private final InvoicePdfService invoicePdfService;
     private final SaleQueryService saleQueryService;
 
-    @Operation(summary = "The A4 invoice")
+    @Operation(summary = "The invoice PDF with configurable paper type (A4, A5, A6, MM80, MM75)")
     @GetMapping(produces = MediaType.APPLICATION_PDF_VALUE)
-    public ResponseEntity<byte[]> a4(@PathVariable Long saleId) {
+    public ResponseEntity<byte[]> getInvoicePdf(
+            @PathVariable Long saleId,
+            @RequestParam(required = false, defaultValue = "A4") PrintPaperType paperType) {
+
         SaleDetailResponse sale = saleQueryService.findById(saleId);
-        return pdf(invoicePdfService.renderA4(sale), sale.invoiceNumber() + ".pdf");
+        byte[] body = invoicePdfService.renderTaxInvoice(sale, paperType != null ? paperType : PrintPaperType.A4);
+        return pdf(body, sale.invoiceNumber() + ".pdf");
     }
 
-    /**
-     * {@code paperWidthMm} accepts any roll in the supported range, not a fixed
-     * set: the "80mm" class alone ships as 75, 76, 78 and 80, and a mart should
-     * be able to name the one its printer actually feeds.
-     */
+    @Operation(summary = "The IRD tax invoice form (matching restaurant-kiosk shape)")
+    @GetMapping(value = "/tax-invoice", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> getTaxInvoicePdf(
+            @PathVariable Long saleId,
+            @RequestParam(required = false, defaultValue = "MM80") PrintPaperType paperType) {
+
+        SaleDetailResponse sale = saleQueryService.findById(saleId);
+        byte[] body = invoicePdfService.renderTaxInvoice(sale, paperType != null ? paperType : PrintPaperType.MM80);
+        return pdf(body, "tax-invoice-" + sale.invoiceNumber() + ".pdf");
+    }
+
     @Operation(summary = "The till receipt, on any supported roll width")
     @GetMapping(value = "/receipt", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> receipt(
@@ -60,9 +65,6 @@ public class InvoiceController {
         return pdf(body, sale.invoiceNumber() + "-receipt.pdf");
     }
 
-    /**
-     * Inline, so a click opens the document rather than downloading it.
-     */
     private ResponseEntity<byte[]> pdf(byte[] body, String filename) {
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)

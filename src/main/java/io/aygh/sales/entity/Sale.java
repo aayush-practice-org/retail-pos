@@ -75,6 +75,23 @@ public class Sale extends BaseEntity {
     @Column(name = "customer_pan", length = 30)
     private String customerPan;
 
+    // ── Nepali calendar ───────────────────────────────────────────────────
+
+    /**
+     * The BS date on which the bill was raised, as entered by the operator
+     * (e.g. "2081.09.05"). Stored verbatim — only the client knows the
+     * Nepali date; the server only has the UTC Instant.
+     */
+    @Column(name = "nepali_date", length = 20)
+    private String nepaliDate;
+
+    /**
+     * The IRD fiscal year this bill belongs to (e.g. "2081.082"), derived
+     * from the BS date when provided, otherwise calculated from soldAt.
+     */
+    @Column(name = "fiscal_year", length = 20)
+    private String fiscalYear;
+
     // ── Money ─────────────────────────────────────────────────────────────
 
     @Column(name = "sub_total", nullable = false, precision = 14, scale = 2)
