@@ -6,7 +6,9 @@ import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
-/** Settling a bill that went out unpaid or part-paid. */
+/**
+ * Settling a bill that went out unpaid or part-paid.
+ */
 public record SalePaymentRequest(
 
         @NotNull(message = "Amount is required")

@@ -1,5 +1,6 @@
 package io.aygh.customer.service.query;
 
+import io.aygh.customer.dto.response.CustomerOutstandingResponse;
 import io.aygh.customer.dto.response.CustomerResponse;
 import io.aygh.shared.response.PagedResponse;
 import org.springframework.data.domain.Pageable;
@@ -15,4 +16,6 @@ public interface CustomerQueryService {
     PagedResponse<CustomerResponse> findAll(String search, Pageable pageable);
 
     List<CustomerResponse> findAllForSelection();
+
+    CustomerOutstandingResponse getOutstanding(Long id);
 }

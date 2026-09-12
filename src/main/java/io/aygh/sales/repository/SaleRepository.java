@@ -13,6 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -102,4 +103,20 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             Instant start,
             Instant end
     );
+
+    @Query("""
+            SELECT COALESCE(SUM(s.netTotal - s.paidAmount), 0)
+            FROM Sale s
+            WHERE s.customer.id = :customerId
+              AND s.paymentStatus != io.aygh.shared.entity.PaymentStatus.PAID
+            """)
+    BigDecimal findOutstandingBalanceByCustomerId(@Param("customerId") Long customerId);
+
+    @Query("""
+            SELECT s FROM Sale s
+            WHERE s.customer.id = :customerId
+              AND s.paymentStatus != io.aygh.shared.entity.PaymentStatus.PAID
+            ORDER BY s.soldAt ASC
+            """)
+    List<Sale> findUnpaidSalesByCustomerId(@Param("customerId") Long customerId);
 }

@@ -1,7 +1,10 @@
 package io.aygh.customer.controller;
 
 import io.aygh.customer.dto.request.CustomerRequest;
+import io.aygh.customer.dto.request.CustomerSettlementRequest;
+import io.aygh.customer.dto.response.CustomerOutstandingResponse;
 import io.aygh.customer.dto.response.CustomerResponse;
+import io.aygh.customer.dto.response.CustomerSettlementResponse;
 import io.aygh.customer.service.command.CustomerCommandService;
 import io.aygh.customer.service.query.CustomerQueryService;
 import io.aygh.shared.response.ApiResponse;
@@ -62,6 +65,20 @@ public class CustomerController {
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<CustomerResponse>> get(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(customerQueryService.findById(id)));
+    }
+
+    @Operation(summary = "Customer credit outstanding — limit, total debt and unpaid invoices")
+    @GetMapping("/{id}/outstanding")
+    public ResponseEntity<ApiResponse<CustomerOutstandingResponse>> outstanding(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(customerQueryService.getOutstanding(id)));
+    }
+
+    @Operation(summary = "Settle customer credit — applies payment across oldest unpaid invoices first (FIFO)")
+    @PostMapping("/{id}/settle")
+    public ResponseEntity<ApiResponse<CustomerSettlementResponse>> settle(
+            @PathVariable Long id,
+            @Valid @RequestBody CustomerSettlementRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("Settlement recorded", customerCommandService.settle(id, request)));
     }
 
     @Operation(summary = "Update customer details")

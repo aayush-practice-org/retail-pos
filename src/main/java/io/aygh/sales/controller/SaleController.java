@@ -1,6 +1,5 @@
 package io.aygh.sales.controller;
 
-import io.aygh.sales.dto.request.SalePaymentRequest;
 import io.aygh.sales.dto.request.SaleRequest;
 import io.aygh.sales.dto.response.SaleDetailResponse;
 import io.aygh.sales.dto.response.SalesReportSummary;
@@ -24,14 +23,17 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Bills raised, and the money taken against them.
+ * Bills raised and the stock they move.
  * <p>
  * Backs both the Sales group of the sidebar and the till: a POS sale and a
  * back-office one are the same document, distinguished by
  * {@code SaleRequest#channel}, so there is one endpoint rather than two that
  * would have to be kept in step.
+ * <p>
+ * Payments against credit bills are recorded through the customer settlement
+ * endpoint: {@code POST /customers/{id}/settle}.
  */
-@Tag(name = "Sales", description = "Bills, the stock they move, and the payments taken against them.")
+@Tag(name = "Sales", description = "Bills and the stock they move. Credit payments go through POST /customers/{id}/settle.")
 @RestController
 @RequestMapping("/sales")
 @RequiredArgsConstructor
@@ -89,13 +91,5 @@ public class SaleController {
             @PathVariable String invoiceNumber) {
 
         return ResponseEntity.ok(ApiResponse.ok(saleQueryService.findByInvoiceNumber(invoiceNumber)));
-    }
-
-    @Operation(summary = "Take payment against an unpaid or part-paid bill")
-    @PostMapping("/{id}/payments")
-    public ResponseEntity<ApiResponse<SaleDetailResponse>> pay(
-            @PathVariable Long id, @Valid @RequestBody SalePaymentRequest request) {
-
-        return ResponseEntity.ok(ApiResponse.ok("Payment recorded", saleCommandService.pay(id, request)));
     }
 }

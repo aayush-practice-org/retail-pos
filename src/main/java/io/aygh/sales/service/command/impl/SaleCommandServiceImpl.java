@@ -6,7 +6,6 @@ import io.aygh.exception.BusinessException;
 import io.aygh.inventory.entity.Product;
 import io.aygh.inventory.entity.ProductSellingUnit;
 import io.aygh.sales.dto.request.SaleItemRequest;
-import io.aygh.sales.dto.request.SalePaymentRequest;
 import io.aygh.sales.dto.request.SaleRequest;
 import io.aygh.sales.dto.response.SaleDetailResponse;
 import io.aygh.sales.entity.Sale;
@@ -19,7 +18,6 @@ import io.aygh.sales.mapper.SaleMapper;
 import io.aygh.sales.repository.SaleRepository;
 import io.aygh.sales.service.command.SaleCommandService;
 import io.aygh.shared.entity.PaymentMethod;
-import io.aygh.shared.entity.PaymentStatus;
 import io.aygh.stock.entity.StockMovementType;
 import io.aygh.stock.entity.StockReferenceType;
 import io.aygh.stock.service.command.StockLedgerService;
@@ -91,11 +89,36 @@ public class SaleCommandServiceImpl implements SaleCommandService {
             throw new BusinessException("The discount is more than the basket comes to");
         }
 
-        // Credit leaves the bill owing whatever was not handed over; everything
-        // else is taken as tendered in full unless the caller said otherwise.
+        // Credit leaves the bill owing in full; everything else must be tendered
+        // in full at the till — partial cash / card is not allowed.
         BigDecimal tendered = request.tenderedAmount() != null
                 ? request.tenderedAmount()
                 : (request.paymentMethod() == PaymentMethod.CREDIT ? BigDecimal.ZERO : sale.getNetTotal());
+
+        if (request.paymentMethod() == PaymentMethod.CREDIT) {
+            if (customer == null) {
+                throw new BusinessException("A registered customer is required for credit sales");
+            }
+            if (!customer.isActive()) {
+                throw new BusinessException("Customer '" + customer.getName() + "' is inactive and cannot make credit purchases");
+            }
+            if (customer.getCreditLimit() == null || customer.getCreditLimit().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BusinessException("Customer '" + customer.getName() + "' does not have an approved credit limit");
+            }
+
+            BigDecimal currentDebt = saleRepository.findOutstandingBalanceByCustomerId(customer.getId());
+            BigDecimal newCredit = sale.getNetTotal().subtract(tendered).max(BigDecimal.ZERO);
+            BigDecimal projectedDebt = currentDebt.add(newCredit);
+
+            if (projectedDebt.compareTo(customer.getCreditLimit()) > 0) {
+                throw new BusinessException(String.format(
+                        "Credit limit exceeded for customer '%s'. Credit limit: %s, Current balance: %s, New credit: %s, Projected total: %s",
+                        customer.getName(), customer.getCreditLimit(), currentDebt, newCredit, projectedDebt));
+            }
+        } else if (tendered.compareTo(sale.getNetTotal()) < 0) {
+            throw new BusinessException("Partial payment is only allowed for credit sales with a registered customer");
+        }
+
         sale.settle(tendered);
 
         Sale saved = saleRepository.save(sale);
@@ -118,29 +141,6 @@ public class SaleCommandServiceImpl implements SaleCommandService {
         log.info("Billed {} — {} line(s), net {}, {}",
                 saved.getInvoiceNumber(), saved.getItems().size(),
                 saved.getNetTotal(), saved.getPaymentStatus());
-
-        return saleMapper.toDetail(saved);
-    }
-
-    @Override
-    public SaleDetailResponse pay(Long saleId, SalePaymentRequest request) {
-        Sale sale = resolver.sale(saleId);
-
-        if (sale.getPaymentStatus() == PaymentStatus.PAID) {
-            throw new BusinessException("Invoice " + sale.getInvoiceNumber() + " is already settled");
-        }
-
-        // settle() takes the total handed over across the life of the bill, not
-        // this instalment, so the running total goes in.
-        sale.settle(sale.getPaidAmount().add(request.amount()));
-
-        if (request.paymentMethod() != null) {
-            sale.setPaymentMethod(request.paymentMethod());
-        }
-
-        Sale saved = saleRepository.save(sale);
-        log.info("Took {} against invoice {} — now {}",
-                request.amount(), saved.getInvoiceNumber(), saved.getPaymentStatus());
 
         return saleMapper.toDetail(saved);
     }
