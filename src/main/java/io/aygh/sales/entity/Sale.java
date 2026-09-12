@@ -91,7 +91,9 @@ public class Sale extends BaseEntity {
     @Builder.Default
     private BigDecimal vatAmount = BigDecimal.ZERO;
 
-    /** What the customer owes: taxable amount plus VAT. */
+    /**
+     * What the customer owes: taxable amount plus VAT.
+     */
     @Column(name = "net_total", nullable = false, precision = 14, scale = 2)
     private BigDecimal netTotal;
 
@@ -110,7 +112,9 @@ public class Sale extends BaseEntity {
     @Builder.Default
     private BigDecimal paidAmount = BigDecimal.ZERO;
 
-    /** Cash handed back. Stored because the receipt has to print it. */
+    /**
+     * Cash handed back. Stored because the receipt has to print it.
+     */
     @Column(name = "change_amount", nullable = false, precision = 14, scale = 2)
     @Builder.Default
     private BigDecimal changeAmount = BigDecimal.ZERO;
@@ -148,7 +152,9 @@ public class Sale extends BaseEntity {
         paymentStatus = paid.signum() > 0 ? PaymentStatus.PARTIAL : PaymentStatus.UNPAID;
     }
 
-    /** Still owed on this bill. */
+    /**
+     * Still owed on this bill.
+     */
     public BigDecimal dueAmount() {
         return netTotal.subtract(paidAmount);
     }

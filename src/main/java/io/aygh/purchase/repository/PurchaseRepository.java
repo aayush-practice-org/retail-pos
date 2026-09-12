@@ -1,6 +1,8 @@
 package io.aygh.purchase.repository;
 
+import io.aygh.purchase.dto.response.PurchaseReportSummary;
 import io.aygh.purchase.entity.Purchase;
+import io.aygh.sales.dto.response.PaymentTypeTotal;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -9,7 +11,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -47,4 +51,26 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
 
     @Query("SELECT COUNT(i) FROM PurchaseItem i WHERE i.purchase.id = :purchaseId")
     int countItems(@Param("purchaseId") Long purchaseId);
+
+    @Query("""
+               SELECT new io.aygh.purchase.dto.response.PurchaseReportSummary(
+                      SUM(p.netTotal), SUM(p.vatAmount), COUNT(p), null
+                    ) FROM Purchase p
+                    WHERE p.createdAt BETWEEN :start AND :end
+            """)
+    PurchaseReportSummary purchaseReport(@Param("start") Instant start, @Param("end") Instant end);
+
+    @Query("""
+                SELECT new io.aygh.sales.dto.response.PaymentTypeTotal(
+                    p.paymentMethod,
+                    SUM(p.netTotal)
+                )
+                FROM Purchase p
+                WHERE p.createdAt BETWEEN :start AND :end
+                GROUP BY p.paymentMethod
+            """)
+    List<PaymentTypeTotal> paymentByType(
+            @Param("start") Instant start,
+            @Param("end") Instant end
+    );
 }

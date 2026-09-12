@@ -3,12 +3,14 @@ package io.aygh.sales.controller;
 import io.aygh.sales.dto.request.SalePaymentRequest;
 import io.aygh.sales.dto.request.SaleRequest;
 import io.aygh.sales.dto.response.SaleDetailResponse;
+import io.aygh.sales.dto.response.SalesReportSummary;
 import io.aygh.sales.dto.response.SaleSummaryResponse;
 import io.aygh.sales.dto.response.SalesTotalsResponse;
 import io.aygh.sales.service.command.SaleCommandService;
 import io.aygh.sales.service.query.SaleQueryService;
 import io.aygh.shared.entity.PaymentStatus;
 import io.aygh.shared.response.ApiResponse;
+import io.aygh.shared.response.DateRange;
 import io.aygh.shared.response.PageableRequest;
 import io.aygh.shared.response.PagedResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,13 +18,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.time.Instant;
 
 /**
  * Bills raised, and the money taken against them.
@@ -55,21 +54,27 @@ public class SaleController {
     public ResponseEntity<ApiResponse<PagedResponse<SaleSummaryResponse>>> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) PaymentStatus status,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @RequestParam(required = false) DateRange dateRange,
             @ModelAttribute PageableRequest pageable) {
 
         return ResponseEntity.ok(ApiResponse.ok(
-                saleQueryService.findAll(search, status, from, to, pageable.toPageable())));
+                saleQueryService.findAll(search, status, dateRange, pageable.toPageable())));
     }
 
     @Operation(summary = "What was sold over a window")
     @GetMapping("/totals")
     public ResponseEntity<ApiResponse<SalesTotalsResponse>> totals(
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
+            @RequestParam(required = false) DateRange dateRange) {
 
-        return ResponseEntity.ok(ApiResponse.ok(saleQueryService.totals(from, to)));
+        return ResponseEntity.ok(ApiResponse.ok(saleQueryService.totals(dateRange)));
+    }
+
+    @Operation(summary = "Summary report for sales over a date range")
+    @GetMapping("/report")
+    public ResponseEntity<ApiResponse<SalesReportSummary>> report(
+            @RequestParam(defaultValue = "THIS_MONTH") DateRange dateRange) {
+
+        return ResponseEntity.ok(ApiResponse.ok(saleQueryService.salesReport(dateRange)));
     }
 
     @Operation(summary = "One bill, lines included")

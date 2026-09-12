@@ -42,7 +42,9 @@ public class Purchase extends BaseEntity {
     @JoinColumn(name = "vendor_id", nullable = false)
     private Vendor vendor;
 
-    /** The vendor's own bill number, as printed on the paper that came with the goods. */
+    /**
+     * The vendor's own bill number, as printed on the paper that came with the goods.
+     */
     @Column(name = "bill_number", nullable = false, length = 64)
     private String billNumber;
 
@@ -59,7 +61,9 @@ public class Purchase extends BaseEntity {
 
     // ── Money ─────────────────────────────────────────────────────────────
 
-    /** Sum of the lines, before discount and before VAT. */
+    /**
+     * Sum of the lines, before discount and before VAT.
+     */
     @Column(name = "sub_total", nullable = false, precision = 14, scale = 2)
     private BigDecimal subTotal;
 
@@ -67,7 +71,9 @@ public class Purchase extends BaseEntity {
     @Builder.Default
     private BigDecimal discountAmount = BigDecimal.ZERO;
 
-    /** What VAT is charged on: sub total less discount. */
+    /**
+     * What VAT is charged on: sub total less discount.
+     */
     @Column(name = "taxable_amount", nullable = false, precision = 14, scale = 2)
     private BigDecimal taxableAmount;
 
@@ -75,7 +81,9 @@ public class Purchase extends BaseEntity {
     @Builder.Default
     private BigDecimal vatAmount = BigDecimal.ZERO;
 
-    /** Taxable amount plus VAT — what the vendor is actually owed. */
+    /**
+     * Taxable amount plus VAT — what the vendor is actually owed.
+     */
     @Column(name = "net_total", nullable = false, precision = 14, scale = 2)
     private BigDecimal netTotal;
 
@@ -92,7 +100,9 @@ public class Purchase extends BaseEntity {
         item.setPurchase(this);
     }
 
-    /** Whether the goods were taken on credit and the vendor is still owed. */
+    /**
+     * Whether the goods were taken on credit and the vendor is still owed.
+     */
     public boolean isOnCredit() {
         return paymentMethod == PaymentMethod.CREDIT;
     }

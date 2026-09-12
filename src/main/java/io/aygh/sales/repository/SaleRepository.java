@@ -1,5 +1,7 @@
 package io.aygh.sales.repository;
 
+import io.aygh.sales.dto.response.PaymentTypeTotal;
+import io.aygh.sales.dto.response.SalesReportSummary;
 import io.aygh.sales.dto.response.SalesTotalsResponse;
 import io.aygh.sales.entity.Sale;
 import io.aygh.shared.entity.PaymentStatus;
@@ -12,6 +14,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -27,7 +30,9 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             "items", "items.product", "items.sellingUnit", "items.sellingUnit.unit"})
     Optional<Sale> findDetailByInvoiceNumber(String invoiceNumber);
 
-    /** Listings never open the lines, so nothing is fetched beyond the header. */
+    /**
+     * Listings never open the lines, so nothing is fetched beyond the header.
+     */
     @Query("""
             SELECT s FROM Sale s
             WHERE (:search IS NULL OR LOWER(s.invoiceNumber) LIKE :search
@@ -74,4 +79,27 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
      */
     @Query("SELECT MAX(s.invoiceNumber) FROM Sale s WHERE s.invoiceNumber LIKE :prefix")
     String highestInvoiceNumber(@Param("prefix") String prefix);
+
+    @Query("""
+               SELECT new io.aygh.sales.dto.response.SalesReportSummary(
+                      SUM(s.netTotal), SUM (s.vatAmount), COUNT(s), null 
+            
+                    )  FROM Sale  s 
+                                WHERE s.createdAt between :start and :end
+            """)
+    SalesReportSummary salesReport(Instant start, Instant end);
+
+    @Query("""
+                SELECT new io.aygh.sales.dto.response.PaymentTypeTotal(
+                    s.paymentMethod,
+                    SUM(s.netTotal)
+                )
+                FROM Sale s
+                WHERE s.createdAt BETWEEN :start AND :end
+                GROUP BY s.paymentMethod
+            """)
+    List<PaymentTypeTotal> paymentByType(
+            Instant start,
+            Instant end
+    );
 }

@@ -2,10 +2,12 @@ package io.aygh.purchase.controller;
 
 import io.aygh.purchase.dto.request.PurchaseRequest;
 import io.aygh.purchase.dto.response.PurchaseDetailResponse;
+import io.aygh.purchase.dto.response.PurchaseReportSummary;
 import io.aygh.purchase.dto.response.PurchaseSummaryResponse;
 import io.aygh.purchase.service.command.PurchaseCommandService;
 import io.aygh.purchase.service.query.PurchaseQueryService;
 import io.aygh.shared.response.ApiResponse;
+import io.aygh.shared.response.DateRange;
 import io.aygh.shared.response.PageableRequest;
 import io.aygh.shared.response.PagedResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,13 +15,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDate;
 
 /**
  * Goods bought from vendors.
@@ -34,7 +33,7 @@ import java.time.LocalDate;
 @RequestMapping("/purchases")
 @RequiredArgsConstructor
 @Slf4j
-@PreAuthorize("hasAnyRole('ADMIN', 'STORE_MANAGER', 'INVENTORY_MANAGER', 'PURCHASE_OFFICER', 'STORE_KEEPER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'STORE_MANAGER', 'INVENTORY_MANAGER', 'PURCHASE_OFFICER', 'STORE_KEEPER', 'ACCOUNTANT')")
 public class PurchaseController {
 
     private final PurchaseCommandService purchaseCommandService;
@@ -55,12 +54,19 @@ public class PurchaseController {
     public ResponseEntity<ApiResponse<PagedResponse<PurchaseSummaryResponse>>> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Long vendorId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) DateRange dateRange,
             @ModelAttribute PageableRequest pageable) {
 
         return ResponseEntity.ok(ApiResponse.ok(
-                purchaseQueryService.findAll(search, vendorId, from, to, pageable.toPageable())));
+                purchaseQueryService.findAll(search, vendorId, dateRange, pageable.toPageable())));
+    }
+
+    @Operation(summary = "Summary report for purchases over a date range")
+    @GetMapping("/report")
+    public ResponseEntity<ApiResponse<PurchaseReportSummary>> report(
+            @RequestParam(defaultValue = "THIS_MONTH") DateRange dateRange) {
+
+        return ResponseEntity.ok(ApiResponse.ok(purchaseQueryService.purchaseReport(dateRange)));
     }
 
     @Operation(summary = "One purchase, lines included")

@@ -2,12 +2,12 @@ package io.aygh.sales.service.query;
 
 import io.aygh.sales.dto.response.SaleDetailResponse;
 import io.aygh.sales.dto.response.SaleSummaryResponse;
+import io.aygh.sales.dto.response.SalesReportSummary;
 import io.aygh.sales.dto.response.SalesTotalsResponse;
 import io.aygh.shared.entity.PaymentStatus;
+import io.aygh.shared.response.DateRange;
 import io.aygh.shared.response.PagedResponse;
 import org.springframework.data.domain.Pageable;
-
-import java.time.Instant;
 
 public interface SaleQueryService {
 
@@ -15,8 +15,10 @@ public interface SaleQueryService {
 
     SaleDetailResponse findByInvoiceNumber(String invoiceNumber);
 
-    PagedResponse<SaleSummaryResponse> findAll(String search, PaymentStatus status,
-                                               Instant from, Instant to, Pageable pageable);
+    SalesReportSummary salesReport(DateRange dateRange);
 
-    SalesTotalsResponse totals(Instant from, Instant to);
+    PagedResponse<SaleSummaryResponse> findAll(String search, PaymentStatus status,
+                                               DateRange dateRange, Pageable pageable);
+
+    SalesTotalsResponse totals(DateRange dateRange);
 }

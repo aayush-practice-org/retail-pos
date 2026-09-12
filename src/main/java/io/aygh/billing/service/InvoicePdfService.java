@@ -69,7 +69,9 @@ public class InvoicePdfService {
     private static final float LINE_HEIGHT = 15f;
     private static final float SECTION_GAP = 12f;
 
-    /** The business day every printed timestamp is rendered against. */
+    /**
+     * The business day every printed timestamp is rendered against.
+     */
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Kathmandu");
 
     private static final DateTimeFormatter DATETIME_FMT =
@@ -81,7 +83,9 @@ public class InvoicePdfService {
     // Public API
     // ═══════════════════════════════════════════════════════════════════════
 
-    /** The filed copy: A4, itemised, with the mart's registration details. */
+    /**
+     * The filed copy: A4, itemised, with the mart's registration details.
+     */
     public byte[] renderA4(SaleDetailResponse sale) {
         MartBranding branding = brandingService.resolve();
         log.debug("Rendering A4 invoice for {}", sale.invoiceNumber());
@@ -98,7 +102,9 @@ public class InvoicePdfService {
         }
     }
 
-    /** The counter copy, on whatever roll the till feeds. */
+    /**
+     * The counter copy, on whatever roll the till feeds.
+     */
     public byte[] renderReceipt(SaleDetailResponse sale, PosPaper paper) {
         MartBranding branding = brandingService.resolve();
         PosLayout layout = PosLayout.of(paper);
@@ -202,7 +208,9 @@ public class InvoicePdfService {
         return y;
     }
 
-    /** Column x-positions, right edges for the numeric ones. */
+    /**
+     * Column x-positions, right edges for the numeric ones.
+     */
     private static final float COL_QTY_RIGHT_INSET = 210f;
     private static final float COL_RATE_RIGHT_INSET = 120f;
 
@@ -311,7 +319,9 @@ public class InvoicePdfService {
     // Thermal receipt
     // ═══════════════════════════════════════════════════════════════════════
 
-    /** One item, pre-wrapped, so its height is known before the page is sized. */
+    /**
+     * One item, pre-wrapped, so its height is known before the page is sized.
+     */
     private record ItemBlock(List<String> nameLines, String quantityLine, String amount, String discountLine) {
 
         int lineCount() {
@@ -536,13 +546,17 @@ public class InvoicePdfService {
                 prefixed("Tel ", branding.companyPhone()));
     }
 
-    /** Two decimal places, always — a receipt column that ragged would be unreadable. */
+    /**
+     * Two decimal places, always — a receipt column that ragged would be unreadable.
+     */
     private static String money(BigDecimal amount) {
         BigDecimal value = amount == null ? BigDecimal.ZERO : amount;
         return value.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
-    /** Trailing zeros dropped: "2" rather than "2.000000" for a quantity of two. */
+    /**
+     * Trailing zeros dropped: "2" rather than "2.000000" for a quantity of two.
+     */
     private static String quantity(BigDecimal amount) {
         if (amount == null) {
             return "0";
@@ -572,7 +586,9 @@ public class InvoicePdfService {
         return notBlank(value) ? value.toUpperCase() : "MART";
     }
 
-    /** Joins only the parts that are present, so no separator ever dangles. */
+    /**
+     * Joins only the parts that are present, so no separator ever dangles.
+     */
     private static String join(String separator, String... parts) {
         List<String> present = new ArrayList<>();
         for (String part : parts) {

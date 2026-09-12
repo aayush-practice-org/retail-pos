@@ -2,6 +2,7 @@ package io.aygh.sales.service.query.impl;
 
 import io.aygh.sales.dto.response.SaleDetailResponse;
 import io.aygh.sales.dto.response.SaleSummaryResponse;
+import io.aygh.sales.dto.response.SalesReportSummary;
 import io.aygh.sales.dto.response.SalesTotalsResponse;
 import io.aygh.sales.entity.Sale;
 import io.aygh.sales.helper.SaleResolver;
@@ -9,6 +10,7 @@ import io.aygh.sales.mapper.SaleMapper;
 import io.aygh.sales.repository.SaleRepository;
 import io.aygh.sales.service.query.SaleQueryService;
 import io.aygh.shared.entity.PaymentStatus;
+import io.aygh.shared.response.DateRange;
 import io.aygh.shared.response.PagedResponse;
 import io.aygh.shared.response.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -40,10 +42,21 @@ public class SaleQueryServiceImpl implements SaleQueryService {
     }
 
     @Override
+    public SalesReportSummary salesReport(DateRange dateRange) {
+        DateRange range = dateRange == null ? DateRange.THIS_MONTH : dateRange;
+        SalesReportSummary salesReportSummary = saleRepository.salesReport(range.getStart(), range.getEnd());
+        salesReportSummary.setPaymentTypeTotals(saleRepository.paymentByType(range.getStart(), range.getEnd()));
+        return salesReportSummary;
+    }
+
+    @Override
     public PagedResponse<SaleSummaryResponse> findAll(String search, PaymentStatus status,
-                                                      Instant from, Instant to, Pageable pageable) {
+                                                      DateRange dateRange, Pageable pageable) {
         String pattern = (search == null || search.isBlank())
                 ? null : "%" + search.trim().toLowerCase() + "%";
+
+        Instant from = DateRange.getStart(dateRange);
+        Instant to = DateRange.getEnd(dateRange);
 
         Page<Sale> page = saleRepository.search(pattern, status, from, to, pageable);
 
@@ -55,7 +68,9 @@ public class SaleQueryServiceImpl implements SaleQueryService {
     }
 
     @Override
-    public SalesTotalsResponse totals(Instant from, Instant to) {
+    public SalesTotalsResponse totals(DateRange dateRange) {
+        Instant from = DateRange.getStart(dateRange);
+        Instant to = DateRange.getEnd(dateRange);
         return saleRepository.totalsBetween(from, to);
     }
 }

@@ -1,12 +1,14 @@
 package io.aygh.purchase.service.query.impl;
 
 import io.aygh.purchase.dto.response.PurchaseDetailResponse;
+import io.aygh.purchase.dto.response.PurchaseReportSummary;
 import io.aygh.purchase.dto.response.PurchaseSummaryResponse;
 import io.aygh.purchase.entity.Purchase;
 import io.aygh.purchase.helper.PurchaseResolver;
 import io.aygh.purchase.mapper.PurchaseMapper;
 import io.aygh.purchase.repository.PurchaseRepository;
 import io.aygh.purchase.service.query.PurchaseQueryService;
+import io.aygh.shared.response.DateRange;
 import io.aygh.shared.response.PagedResponse;
 import io.aygh.shared.response.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -33,11 +35,22 @@ public class PurchaseQueryServiceImpl implements PurchaseQueryService {
     }
 
     @Override
+    public PurchaseReportSummary purchaseReport(DateRange dateRange) {
+        DateRange range = dateRange == null ? DateRange.THIS_MONTH : dateRange;
+        PurchaseReportSummary purchaseReportSummary = purchaseRepository.purchaseReport(range.getStart(), range.getEnd());
+        purchaseReportSummary.setPaymentTypeTotals(purchaseRepository.paymentByType(range.getStart(), range.getEnd()));
+        return purchaseReportSummary;
+    }
+
+    @Override
     public PagedResponse<PurchaseSummaryResponse> findAll(String search, Long vendorId,
-                                                          LocalDate from, LocalDate to,
+                                                          DateRange dateRange,
                                                           Pageable pageable) {
         String pattern = (search == null || search.isBlank())
                 ? null : "%" + search.trim().toLowerCase() + "%";
+
+        LocalDate from = DateRange.getStartDate(dateRange);
+        LocalDate to = DateRange.getEndDate(dateRange);
 
         Page<Purchase> page = purchaseRepository.search(pattern, vendorId, from, to, pageable);
 
