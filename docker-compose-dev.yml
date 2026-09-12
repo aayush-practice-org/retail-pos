@@ -4,7 +4,7 @@ services:
     image: postgres:17
 
     env_file:
-      - /var/secrets/mart-app.env
+      - .env
 
     ports:
       - "5434:5432"
@@ -18,7 +18,7 @@ services:
     container_name: mart_app
 
     env_file:
-      - /var/secrets/mart-app.env
+      - .env
 
     ports:
       - "1200:1200"
