@@ -1,5 +1,5 @@
 services:
-  database:
+  mart_database:
     container_name: postgres_mart_db
     image: postgres:17
 
