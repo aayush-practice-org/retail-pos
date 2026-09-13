@@ -24,7 +24,7 @@ services:
       - "1200:1200"
 
     environment:
-      DATASOURCE_URL: jdbc:postgresql://database:5432/mart_app
+      DATASOURCE_URL: jdbc:postgresql://mart_database:5432/mart_app
 
 volumes:
   postgres_mart_db:

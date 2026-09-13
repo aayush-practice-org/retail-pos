@@ -19,3 +19,32 @@ jobs:
           java-version: 25
       - name: Build
         run: mvn clean install
+
+  deploy:
+    if: github.ref_name == 'main'
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.KEY }}
+          port: ${{ secrets.PORT }}
+          script: |
+            set -e
+            
+            mkdir -p /app 
+
+            if [ ! -d "/app/mart-backend/.git" ]; then
+                rm -rf /app/mart-backend
+                git clone git@github.com:Sabal-STS/retail-pos-backend.git /app/mart-backend
+            fi
+            
+            cd /app/mart-backend
+            git pull origin main
+            
+            docker compose down
+            docker compose up -d --build 
