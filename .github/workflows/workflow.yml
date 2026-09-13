@@ -40,7 +40,7 @@ jobs:
 
             if [ ! -d "/app/mart-backend/.git" ]; then
                 rm -rf /app/mart-backend
-                git clone git@github.com:Sabal-STS/retail-pos-backend.git /app/mart-backend
+                git clone https://github.com/aayush-practice-org/retail-pos.git /app/mart-backend
             fi
             
             cd /app/mart-backend
