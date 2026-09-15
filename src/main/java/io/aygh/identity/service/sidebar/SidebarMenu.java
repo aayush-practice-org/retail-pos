@@ -66,7 +66,7 @@ public enum SidebarMenu {
 
     // ── Administration & Settings ─────────────────────────────────────────
 
-    STAFF(EnumSet.of(UserRole.ADMIN)),
+    STAFF(EnumSet.of(UserRole.ADMIN, UserRole.HR_MANAGER)),
     SETTINGS(EnumSet.of(UserRole.ADMIN)),
     ACCOUNT(EnumSet.allOf(UserRole.class));
 

@@ -46,7 +46,7 @@ import java.time.ZoneOffset;
 @RequestMapping("/sales")
 @RequiredArgsConstructor
 @Slf4j
-@PreAuthorize("hasAnyRole('ADMIN', 'STORE_MANAGER', 'SALES_EXECUTIVE', 'ACCOUNTANT', 'CASHIER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'STORE_MANAGER', 'SALES_EXECUTIVE', 'ACCOUNTANT', 'CASHIER', 'CUSTOMER_SUPPORT')")
 public class SaleController {
 
     private final SaleCommandService saleCommandService;

@@ -45,7 +45,7 @@ import java.util.UUID;
 @RequestMapping("/admin/staff")
 @RequiredArgsConstructor
 @Slf4j
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'HR_MANAGER')")
 public class AdminStaffController {
 
     private final StaffCommandService staffCommandService;
