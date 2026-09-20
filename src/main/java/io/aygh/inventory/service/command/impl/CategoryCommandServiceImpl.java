@@ -105,7 +105,7 @@ public class CategoryCommandServiceImpl implements CategoryCommandService {
 
     @Override
     public void revokeUnit(Long categoryId, Long categoryUnitId) {
-        CategoryUnit permission = categoryUnitRepository.findByIdAndCategoryId(categoryUnitId, categoryId)
+        CategoryUnit permission = categoryUnitRepository.findByCategoryIdAndUnitId(categoryId, categoryUnitId)
                 .orElseThrow(() -> new BusinessException(
                         "That unit permission does not belong to category " + categoryId));
 

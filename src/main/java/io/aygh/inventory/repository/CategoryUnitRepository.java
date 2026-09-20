@@ -23,4 +23,6 @@ public interface CategoryUnitRepository extends JpaRepository<CategoryUnit, Long
     Optional<CategoryUnit> findByIdAndCategoryId(Long id, Long categoryId);
 
     boolean existsByUnitId(Long unitId);
+
+    Optional<CategoryUnit> findByCategoryIdAndUnitId(Long categoryUnitId, Long categoryId);
 }
