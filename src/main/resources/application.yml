@@ -1,3 +1,12 @@
 spring:
   profiles:
-    active: prod
+    active: dev
+
+  servlet:
+    multipart:
+      # A catalogue import is the only upload here. Spring's 1MB default cuts
+      # off around 2000 product rows, which is inside the range a real mart
+      # actually has, and the failure looks like a broken request rather than a
+      # limit — so the ceiling is raised to somewhere nobody sensible reaches.
+      max-file-size: 10MB
+      max-request-size: 10MB

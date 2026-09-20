@@ -72,6 +72,8 @@ public interface ProductUnitMapper {
 
     // ── Selling ───────────────────────────────────────────────────────────
 
+    @Mapping(target = "productId", source = "product.id")
+    @Mapping(target = "productName", source = "product.name")
     ProductSellingUnitResponse toResponse(ProductSellingUnit sellingUnit);
 
     List<ProductSellingUnitResponse> toSellingResponses(List<ProductSellingUnit> sellingUnits);

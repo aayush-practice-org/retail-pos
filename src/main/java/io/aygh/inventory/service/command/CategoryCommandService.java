@@ -11,6 +11,13 @@ public interface CategoryCommandService {
 
     CategorySummaryResponse update(Long id, CategoryRequest request);
 
+    /**
+     * Makes this the category products land in when nobody chose one — what
+     * quick-add at the till and an import with a blank category column use.
+     * Whichever category held it loses it, so exactly one always has it.
+     */
+    CategorySummaryResponse makeDefault(Long id);
+
     void delete(Long id);
 
     /**

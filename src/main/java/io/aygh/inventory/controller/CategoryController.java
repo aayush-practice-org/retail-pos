@@ -81,6 +81,15 @@ public class CategoryController {
         return ResponseEntity.ok(ApiResponse.ok("Category updated", categoryCommandService.update(id, request)));
     }
 
+    @Operation(summary = "Make this the category unfiled products go to",
+            description = "Used by quick-add at the till and by an import whose category column is "
+                    + "blank. Whichever category held it loses it.")
+    @PatchMapping("/{id}/default")
+    public ResponseEntity<ApiResponse<CategorySummaryResponse>> makeDefault(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Default category updated", categoryCommandService.makeDefault(id)));
+    }
+
     // ── Unit policy ───────────────────────────────────────────────────────
 
     @Operation(summary = "Permit a unit for buying or selling in this category")

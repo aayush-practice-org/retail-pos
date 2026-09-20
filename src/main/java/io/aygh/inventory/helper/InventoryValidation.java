@@ -94,6 +94,18 @@ public class InventoryValidation {
         }
     }
 
+    /**
+     * Deleting the default would leave quick-add and an import with a blank
+     * category column nowhere to put anything, and the failure would surface
+     * at the till rather than here.
+     */
+    public void requireNotDefaultCategory(Category category) {
+        if (category.isDefaultCategory()) {
+            throw new BusinessException("'" + category.getName() + "' is where unfiled products go; "
+                    + "make another category the default before removing it");
+        }
+    }
+
     public void requireUnitNotAlreadyPermitted(Long categoryId, Long unitId, UnitUsage usage) {
         if (categoryUnitRepository.existsByCategoryIdAndUnitIdAndUsage(categoryId, unitId, usage)) {
             throw new BusinessException("That unit is already permitted for " + usage);
@@ -130,29 +142,25 @@ public class InventoryValidation {
      * Stock is held in the base unit, so it has to be one with a fixed size. A
      * Sack means a different amount for every product; counting inventory in
      * them makes two products' stock figures incomparable.
+     * <p>
+     * This used to log at debug and let the write through, which meant the
+     * check read as enforcement in every caller while enforcing nothing: a
+     * product could be created counted in Sacks and every quantity recorded
+     * against it afterwards was quietly meaningless. It throws now. Requests
+     * that leave the base unit to be derived can never trip it — derivation
+     * only ever picks a reference unit — so the only callers it can fail are
+     * the ones that named a bad unit outright.
      */
     public void requireUsableAsBaseUnit(Unit unit) {
         if (!unit.isReferenceUnit()) {
-            log.debug("Base unit '{}' is not the reference unit of {}", unit.getName(), unit.getMeasurementType());
+            throw new BusinessException("Stock cannot be counted in '" + unit.getName()
+                    + "': it has no fixed size. Leave the base unit out and it will be derived from "
+                    + "how the product is sold, or name the reference unit for "
+                    + unit.getMeasurementType());
         }
     }
 
     // ── Trading configuration ─────────────────────────────────────────────
-
-    /**
-     * The check that makes {@code CategoryUnit} mean something. Without it the
-     * category's unit policy is decoration: a product could be configured to
-     * sell in a unit its category never authorised.
-     */
-    public void requirePermittedByCategory(Category category, Unit unit, UnitUsage usage) {
-        boolean permitted = categoryUnitRepository
-                .existsByCategoryIdAndUnitIdAndUsage(category.getId(), unit.getId(), usage);
-        if (!permitted) {
-            throw new BusinessException("Category '" + category.getName() + "' does not permit '"
-                    + unit.getName() + "' for " + usage
-                    + " — authorise it on the category first");
-        }
-    }
 
     /**
      * Both units must measure the same thing as the product's base unit, or the

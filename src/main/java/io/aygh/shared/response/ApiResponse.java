@@ -66,4 +66,14 @@ public record ApiResponse<T>(
     public static <T> ApiResponse<T> error(HttpStatus status, String message, List<FieldError> errors) {
         return new ApiResponse<>(false, status.value(), message, null, errors, Instant.now());
     }
+
+    /**
+     * A failure whose payload is the explanation: a bulk import's row-by-row
+     * report, where the useful part is the body rather than the status. The
+     * other error factories null {@code data} out, which for these would throw
+     * away the only thing the caller needs to act on.
+     */
+    public static <T> ApiResponse<T> failed(HttpStatus status, String message, T data) {
+        return new ApiResponse<>(false, status.value(), message, data, List.of(), Instant.now());
+    }
 }

@@ -13,6 +13,16 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 public class ProductSellingUnitResponse extends BaseResponse {
 
+    /**
+     * Which product this prices. Nested under a product for most of its
+     * callers and therefore redundant there — but a barcode scan arrives at
+     * this row with nothing else, and a sale line is keyed by product, so
+     * without these the till would have to look the product up again to ring
+     * up what it just scanned.
+     */
+    private Long productId;
+    private String productName;
+
     private UnitResponse unit;
 
     private BigDecimal packQuantity;

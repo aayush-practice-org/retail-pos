@@ -33,6 +33,15 @@ public class Category extends BaseEntity {
     private String image;
 
     /**
+     * Where a product goes when nobody chose an aisle. Exactly one category
+     * carries it, enforced by a partial unique index — quick-add at the till
+     * has to have somewhere to put things, and "somewhere" cannot be ambiguous.
+     */
+    @Column(name = "default_category", nullable = false)
+    @Builder.Default
+    private boolean defaultCategory = false;
+
+    /**
      * The units products in this category may be traded in. Cascaded: a
      * permission has no meaning once the category is gone.
      */

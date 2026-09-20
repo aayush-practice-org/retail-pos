@@ -55,10 +55,32 @@ public class CategoryCommandServiceImpl implements CategoryCommandService {
     }
 
     @Override
+    public CategorySummaryResponse makeDefault(Long id) {
+        Category category = resolver.category(id);
+
+        if (category.isDefaultCategory()) {
+            return categoryMapper.toSummary(category);
+        }
+
+        // Released before it is claimed, not for tidiness: only one row may
+        // carry the flag, so setting the new one first violates the index.
+        // The clear detaches everything, hence the second load.
+        categoryRepository.clearDefault();
+
+        Category target = resolver.category(id);
+        target.setDefaultCategory(true);
+
+        Category saved = categoryRepository.save(target);
+        log.info("Unfiled products now go to category '{}'", saved.getName());
+        return categoryMapper.toSummary(saved);
+    }
+
+    @Override
     public void delete(Long id) {
         Category category = resolver.category(id);
 
         validation.requireCategoryEmpty(id);
+        validation.requireNotDefaultCategory(category);
 
         categoryRepository.delete(category);
         log.info("Removed category '{}'", category.getName());

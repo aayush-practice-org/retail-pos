@@ -7,12 +7,15 @@ import io.aygh.inventory.dto.request.ProductSellingUnitCreateRequest;
 import io.aygh.inventory.dto.request.ProductSellingUnitUpdateRequest;
 import io.aygh.inventory.dto.request.ProductUpdateRequest;
 import io.aygh.inventory.dto.request.ProductVatRequest;
+import io.aygh.inventory.dto.request.QuickAddRequest;
 import io.aygh.inventory.dto.response.ProductDetailResponse;
+import io.aygh.inventory.dto.response.ProductImportResponse;
 import io.aygh.inventory.dto.response.ProductPurchaseUnitDetailResponse;
 import io.aygh.inventory.dto.response.ProductPurchaseUnitResponse;
 import io.aygh.inventory.dto.response.ProductSellingUnitResponse;
 import io.aygh.inventory.dto.response.ProductSummaryResponse;
 import io.aygh.inventory.service.command.ProductCommandService;
+import io.aygh.inventory.service.command.ProductImportService;
 import io.aygh.inventory.service.query.ProductQueryService;
 import io.aygh.shared.response.ApiResponse;
 import io.aygh.shared.response.PageableRequest;
@@ -25,7 +28,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -53,17 +58,53 @@ import java.util.List;
 public class ProductController {
 
     private final ProductCommandService productCommandService;
+    private final ProductImportService productImportService;
     private final ProductQueryService productQueryService;
 
     // ── Catalogue ─────────────────────────────────────────────────────────
 
-    @Operation(summary = "Add a product")
+    @Operation(summary = "Add a product, with how it is bought and sold, in one call")
     @PostMapping
-    public ResponseEntity<ApiResponse<ProductSummaryResponse>> create(
+    public ResponseEntity<ApiResponse<ProductDetailResponse>> create(
             @Valid @RequestBody ProductCreateRequest request) {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created(productCommandService.create(request)));
+    }
+
+    @Operation(summary = "Create a product from the till, when a scan finds nothing",
+            description = "Answers with the sellable unit, in the same shape a barcode lookup returns, "
+                    + "so the sale in progress can continue.")
+    @PostMapping("/quick-add")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STORE_MANAGER', 'INVENTORY_MANAGER', 'CASHIER', 'SALES_EXECUTIVE')")
+    public ResponseEntity<ApiResponse<ProductSellingUnitResponse>> quickAdd(
+            @Valid @RequestBody QuickAddRequest request) {
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(productCommandService.quickAdd(request)));
+    }
+
+    @Operation(summary = "Import a catalogue from a CSV file",
+            description = "All or nothing: the file is checked in full and a single bad row means none "
+                    + "of it is written, so the report comes back with every problem at once. "
+                    + "Pass dryRun=true to check a file without importing it.")
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<ProductImportResponse>> importProducts(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(defaultValue = "false") boolean dryRun) {
+
+        ProductImportResponse report = productImportService.importFrom(file, dryRun);
+
+        // A rejected file is not a broken request — it was read and understood,
+        // and the body is the answer. 422 says "nothing was written" without
+        // pretending the caller sent something malformed.
+        if (!report.clean()) {
+            return ResponseEntity.unprocessableEntity()
+                    .body(ApiResponse.failed(HttpStatus.UNPROCESSABLE_ENTITY,
+                            report.errors().size() + " problem(s) found; nothing was imported", report));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(
+                report.dryRun() ? "File checked; nothing was imported" : "Imported", report));
     }
 
     @Operation(summary = "List products — summaries only, no trading configuration")
@@ -86,6 +127,7 @@ public class ProductController {
 
     @Operation(summary = "What the till resolves a scan to")
     @GetMapping("/by-barcode/{barcode}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STORE_MANAGER', 'INVENTORY_MANAGER', 'CASHIER', 'SALES_EXECUTIVE')")
     public ResponseEntity<ApiResponse<ProductSellingUnitResponse>> byBarcode(@PathVariable String barcode) {
         return ResponseEntity.ok(ApiResponse.ok(productQueryService.findByBarcode(barcode)));
     }

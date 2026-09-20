@@ -45,6 +45,18 @@ public class Unit extends BaseEntity {
     private MeasurementType measurementType;
 
     /**
+     * How many of this measurement type's reference unit one of these is: a
+     * Kilogram is 1000 where Gram is the reference.
+     * <p>
+     * NULL for a unit with no fixed size — a Sack, a Crate, a Carton — whose
+     * contents are a decision the product makes, not a fact about the unit.
+     * Those defer to the product's pack quantity, and asking this class for a
+     * factor it does not have is an error rather than a silent 1.
+     */
+    @Column(name = "conversion_factor", precision = 19, scale = 6)
+    private BigDecimal conversionFactor;
+
+    /**
      * True for the one unit each measurement type is expressed in.
      */
     @Column(name = "reference_unit", nullable = false)

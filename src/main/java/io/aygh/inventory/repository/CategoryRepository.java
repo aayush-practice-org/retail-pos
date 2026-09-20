@@ -4,6 +4,7 @@ import io.aygh.inventory.entity.Category;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -13,6 +14,11 @@ import java.util.Optional;
 public interface CategoryRepository extends JpaRepository<Category, Long>, JpaSpecificationExecutor<Category> {
 
     boolean existsByNameIgnoreCase(String name);
+
+    Optional<Category> findByNameIgnoreCase(String name);
+
+    /** Where an unfiled product goes. Seeded, and unique by partial index. */
+    Optional<Category> findByDefaultCategoryIsTrue();
 
     boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
 
@@ -26,4 +32,14 @@ public interface CategoryRepository extends JpaRepository<Category, Long>, JpaSp
 
     @Query("SELECT COUNT(p) FROM Product p WHERE p.category.id = :categoryId")
     long countProducts(Long categoryId);
+
+    /**
+     * Releases the default before another category claims it. A partial unique
+     * index allows one default row, so the two halves cannot be done in the
+     * other order.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Category c SET c.defaultCategory = false "
+            + "WHERE c.defaultCategory = true AND c.deletedAt IS NULL")
+    void clearDefault();
 }

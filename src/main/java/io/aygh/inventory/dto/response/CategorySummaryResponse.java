@@ -16,4 +16,7 @@ public class CategorySummaryResponse extends BaseResponse {
     private String name;
     private String description;
     private String image;
+
+    /** The aisle an unfiled product lands in. Exactly one category has it. */
+    private boolean defaultCategory;
 }

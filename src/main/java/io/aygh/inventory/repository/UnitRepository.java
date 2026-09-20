@@ -29,4 +29,12 @@ public interface UnitRepository extends JpaRepository<Unit, Long>, JpaSpecificat
 
     /** The unit every other unit of this type converts through. */
     Optional<Unit> findByMeasurementTypeAndReferenceUnitIsTrue(MeasurementType measurementType);
+
+    /**
+     * Resolving what someone typed. An importer writing "kg" should not have to
+     * look an id up first, and a symbol is what appears on the shelf label.
+     */
+    Optional<Unit> findBySymbolIgnoreCase(String symbol);
+
+    Optional<Unit> findByNameIgnoreCase(String name);
 }
