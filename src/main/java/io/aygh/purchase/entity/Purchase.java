@@ -87,6 +87,11 @@ public class Purchase extends BaseEntity {
     @Column(name = "net_total", nullable = false, precision = 14, scale = 2)
     private BigDecimal netTotal;
 
+    /** Sent back to the vendor on purchase returns, at what it cost. */
+    @Column(name = "returned_amount", nullable = false, precision = 14, scale = 2)
+    @Builder.Default
+    private BigDecimal returnedAmount = BigDecimal.ZERO;
+
     @Column(name = "remark", length = 255)
     private String remark;
 

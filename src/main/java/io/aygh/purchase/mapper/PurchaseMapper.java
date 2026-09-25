@@ -60,6 +60,7 @@ public class PurchaseMapper {
                 purchase.getTaxableAmount(),
                 purchase.getVatAmount(),
                 purchase.getNetTotal(),
+                purchase.getReturnedAmount(),
                 purchase.getRemark(),
                 items,
                 purchase.getCreatedAt());

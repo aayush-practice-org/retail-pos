@@ -154,6 +154,14 @@ public class Sale extends BaseEntity {
     @Builder.Default
     private BigDecimal changeAmount = BigDecimal.ZERO;
 
+    /**
+     * Credited back on sales returns. The customer owes {@code netTotal} less
+     * this — see {@link #payableAmount()}.
+     */
+    @Column(name = "returned_amount", nullable = false, precision = 14, scale = 2)
+    @Builder.Default
+    private BigDecimal returnedAmount = BigDecimal.ZERO;
+
     @Column(name = "remark", length = 255)
     private String remark;
 
@@ -174,10 +182,11 @@ public class Sale extends BaseEntity {
      */
     public void settle(BigDecimal tendered) {
         BigDecimal paid = tendered == null ? BigDecimal.ZERO : tendered;
+        BigDecimal payable = payableAmount();
 
-        if (paid.compareTo(netTotal) >= 0) {
-            paidAmount = netTotal;
-            changeAmount = paid.subtract(netTotal);
+        if (paid.compareTo(payable) >= 0) {
+            paidAmount = payable;
+            changeAmount = paid.subtract(payable);
             paymentStatus = PaymentStatus.PAID;
             return;
         }
@@ -188,9 +197,34 @@ public class Sale extends BaseEntity {
     }
 
     /**
+     * Credits a sales return against this bill and hands back what the customer
+     * is owed in cash: whatever they had already paid beyond the reduced bill.
+     * The rest of the credit simply comes off what they still owe.
+     *
+     * @return the refund due to the customer
+     */
+    public BigDecimal applyReturn(BigDecimal credit) {
+        returnedAmount = returnedAmount.add(credit);
+        BigDecimal payable = payableAmount();
+
+        BigDecimal refund = paidAmount.subtract(payable).max(BigDecimal.ZERO);
+        paidAmount = paidAmount.subtract(refund);
+        paymentStatus = paidAmount.compareTo(payable) >= 0 ? PaymentStatus.PAID
+                : paidAmount.signum() > 0 ? PaymentStatus.PARTIAL : PaymentStatus.UNPAID;
+        return refund;
+    }
+
+    /**
+     * What the customer owes for this bill once returns are credited.
+     */
+    public BigDecimal payableAmount() {
+        return netTotal.subtract(returnedAmount);
+    }
+
+    /**
      * Still owed on this bill.
      */
     public BigDecimal dueAmount() {
-        return netTotal.subtract(paidAmount);
+        return payableAmount().subtract(paidAmount);
     }
 }
