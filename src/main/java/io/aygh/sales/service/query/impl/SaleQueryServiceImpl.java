@@ -8,6 +8,7 @@ import io.aygh.sales.entity.Sale;
 import io.aygh.sales.helper.SaleResolver;
 import io.aygh.sales.mapper.SaleMapper;
 import io.aygh.sales.repository.SaleRepository;
+import io.aygh.sales.repository.SalesReturnRepository;
 import io.aygh.sales.service.query.SaleQueryService;
 import io.aygh.shared.entity.PaymentStatus;
 import io.aygh.shared.response.DateRange;
@@ -28,6 +29,7 @@ import java.util.List;
 public class SaleQueryServiceImpl implements SaleQueryService {
 
     private final SaleRepository saleRepository;
+    private final SalesReturnRepository salesReturnRepository;
     private final SaleResolver resolver;
     private final SaleMapper saleMapper;
 
@@ -46,6 +48,7 @@ public class SaleQueryServiceImpl implements SaleQueryService {
         DateRange range = dateRange == null ? DateRange.THIS_MONTH : dateRange;
         SalesReportSummary salesReportSummary = saleRepository.salesReport(range.getStart(), range.getEnd());
         salesReportSummary.setPaymentTypeTotals(saleRepository.paymentByType(range.getStart(), range.getEnd()));
+        salesReportSummary.applyReturns(salesReturnRepository.totalsBetween(range.getStart(), range.getEnd()));
         return salesReportSummary;
     }
 

@@ -62,6 +62,7 @@ public class SaleMapper {
                 sale.getTaxableAmount(),
                 sale.getVatAmount(),
                 sale.getNetTotal(),
+                sale.getReturnedAmount(),
                 sale.getPaymentMethod(),
                 sale.getPaymentStatus(),
                 sale.getPaidAmount(),

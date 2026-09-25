@@ -32,6 +32,8 @@ public record SaleDetailResponse(
         BigDecimal taxableAmount,
         BigDecimal vatAmount,
         BigDecimal netTotal,
+        /** Credited back on sales returns. */
+        BigDecimal returnedAmount,
 
         PaymentMethod paymentMethod,
         PaymentStatus paymentStatus,

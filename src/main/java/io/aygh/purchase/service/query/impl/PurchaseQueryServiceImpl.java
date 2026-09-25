@@ -7,6 +7,7 @@ import io.aygh.purchase.entity.Purchase;
 import io.aygh.purchase.helper.PurchaseResolver;
 import io.aygh.purchase.mapper.PurchaseMapper;
 import io.aygh.purchase.repository.PurchaseRepository;
+import io.aygh.purchase.repository.PurchaseReturnRepository;
 import io.aygh.purchase.service.query.PurchaseQueryService;
 import io.aygh.shared.response.DateRange;
 import io.aygh.shared.response.PagedResponse;
@@ -26,6 +27,7 @@ import java.util.List;
 public class PurchaseQueryServiceImpl implements PurchaseQueryService {
 
     private final PurchaseRepository purchaseRepository;
+    private final PurchaseReturnRepository purchaseReturnRepository;
     private final PurchaseResolver resolver;
     private final PurchaseMapper purchaseMapper;
 
@@ -39,6 +41,7 @@ public class PurchaseQueryServiceImpl implements PurchaseQueryService {
         DateRange range = dateRange == null ? DateRange.THIS_MONTH : dateRange;
         PurchaseReportSummary purchaseReportSummary = purchaseRepository.purchaseReport(range.getStart(), range.getEnd());
         purchaseReportSummary.setPaymentTypeTotals(purchaseRepository.paymentByType(range.getStart(), range.getEnd()));
+        purchaseReportSummary.applyReturns(purchaseReturnRepository.totalsBetween(range.getStart(), range.getEnd()));
         return purchaseReportSummary;
     }
 

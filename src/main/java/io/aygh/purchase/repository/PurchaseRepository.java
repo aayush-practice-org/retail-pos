@@ -7,9 +7,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.LockModeType;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,6 +23,14 @@ public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
 
     /** A vendor's bill numbers must not repeat, or a duplicate entry goes unnoticed. */
     boolean existsByVendorIdAndBillNumberIgnoreCase(Long vendorId, String billNumber);
+
+    /**
+     * Holds the bill while a return is worked out against it, so two requests
+     * cannot both send back the last of the same line.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Purchase p WHERE p.id = :id")
+    Optional<Purchase> findForUpdate(@Param("id") Long id);
 
     /**
      * The lines and everything they display, in one read. The detail view needs

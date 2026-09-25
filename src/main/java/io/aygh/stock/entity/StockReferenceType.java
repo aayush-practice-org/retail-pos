@@ -7,7 +7,11 @@ package io.aygh.stock.entity;
  */
 public enum StockReferenceType {
     PURCHASE,
+    /** A debit note: goods sent back to the vendor. */
+    PURCHASE_RETURN,
     SALE,
+    /** A credit note: goods handed back against a sale. */
+    SALE_RETURN,
     ADJUSTMENT,
     WRITE_OFF
 }

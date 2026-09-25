@@ -9,9 +9,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.LockModeType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -22,6 +24,14 @@ import java.util.Optional;
 public interface SaleRepository extends JpaRepository<Sale, Long> {
 
     boolean existsByInvoiceNumber(String invoiceNumber);
+
+    /**
+     * Holds the bill while a return is worked out against it, so two tills
+     * cannot both hand back the last of the same line.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM Sale s WHERE s.id = :id")
+    Optional<Sale> findForUpdate(@Param("id") Long id);
 
     @EntityGraph(attributePaths = {
             "items", "items.product", "items.sellingUnit", "items.sellingUnit.unit"})
@@ -65,7 +75,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
                        SUM(s.vatAmount),
                        SUM(s.netTotal),
                        SUM(s.paidAmount),
-                       SUM(s.netTotal - s.paidAmount))
+                       SUM(s.netTotal - s.returnedAmount - s.paidAmount))
             FROM Sale s
             WHERE (CAST(:from AS timestamp) IS NULL OR s.soldAt >= :from)
               AND (CAST(:to AS timestamp) IS NULL OR s.soldAt <= :to)
@@ -105,7 +115,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
     );
 
     @Query("""
-            SELECT COALESCE(SUM(s.netTotal - s.paidAmount), 0)
+            SELECT COALESCE(SUM(s.netTotal - s.returnedAmount - s.paidAmount), 0)
             FROM Sale s
             WHERE s.customer.id = :customerId
               AND s.paymentStatus != io.aygh.shared.entity.PaymentStatus.PAID

@@ -72,7 +72,7 @@ public class PurchaseCalculator {
         BigDecimal total = BigDecimal.ZERO;
 
         for (PurchaseItem item : items) {
-            BigDecimal rate = rateFor(item, on);
+            BigDecimal rate = vatRateFor(item);
             if (rate.signum() <= 0) {
                 continue;
             }
@@ -84,9 +84,10 @@ public class PurchaseCalculator {
     }
 
     /**
-     * Zero when the purchase unit has no rate — not every good is taxed.
+     * The VAT rate, in percent, a line is charged at. Zero when the purchase unit
+     * has no rate — not every good is taxed.
      */
-    private BigDecimal rateFor(PurchaseItem item, LocalDate on) {
+    public BigDecimal vatRateFor(PurchaseItem item) {
         return vatRepository.findTopByProductPurchaseUnitIdOrderByCreatedAtDesc(item.getPurchaseUnit().getId())
                 .map(ProductPurchaseVat::getRate)
                 .orElse(BigDecimal.ZERO);
