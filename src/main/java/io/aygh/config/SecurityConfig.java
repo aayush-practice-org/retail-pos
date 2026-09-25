@@ -44,8 +44,12 @@ public class SecurityConfig {
     private final PasetoAuthenticationFilter pasetoAuthenticationFilter;
     private final ObjectMapper objectMapper;
 
-    @Value("${app.cors.allowed-origins:http://localhost:6600}")
-    private String[] allowedOrigins;
+    private List<String> allowedOrigins = List.of(
+            "https://sitoulatechsolution.com.np",
+            "https://www.sitoulatechsolution.com.np",
+            "http://localhost:6600",
+            "http://localhost:3000"
+    );
 
     /**
      * BCrypt at the default strength. Deliberately slow: the cost is paid once per
@@ -89,7 +93,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(Arrays.asList(allowedOrigins));
+        config.setAllowedOrigins(allowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setMaxAge(3600L);
