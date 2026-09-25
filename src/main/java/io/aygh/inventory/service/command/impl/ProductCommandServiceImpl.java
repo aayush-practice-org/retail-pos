@@ -112,7 +112,7 @@ public class ProductCommandServiceImpl implements ProductCommandService {
         ProductCreateRequest create = new ProductCreateRequest();
         create.setName(request.name());
         create.setCategoryId(request.categoryId() == null ? defaultCategoryId() : request.categoryId());
-        create.setBarcode(request.barcode());
+        create.setBarcode(request.barcode().strip());
         create.setSellingPrice(request.sellingPrice());
         create.setPurchasePrice(request.purchasePrice());
 
@@ -252,7 +252,7 @@ public class ProductCommandServiceImpl implements ProductCommandService {
                     .sellingPrice(line.price())
                     .mrp(line.mrp())
                     .sku(line.sku())
-                    .barcode(line.barcode())
+                    .barcode(line.barcode().strip())
                     .isDefault(i == defaultAt)
                     .active(true)
                     .build());

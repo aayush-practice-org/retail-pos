@@ -76,7 +76,7 @@ public class ProductQueryServiceImpl implements ProductQueryService {
 
     @Override
     public ProductSellingUnitResponse findByBarcode(String barcode) {
-        return sellingUnitRepository.findByBarcode(barcode)
+        return sellingUnitRepository.findByBarcode(barcode.strip())
                 .map(productUnitMapper::toResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Product", "barcode", barcode));
     }

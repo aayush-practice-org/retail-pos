@@ -24,7 +24,9 @@ public interface ProductSellingUnitRepository extends JpaRepository<ProductSelli
 
     boolean existsByProductIdAndUnitIdAndIdNot(Long productId, Long unitId, Long id);
 
-    /** Barcodes are scanned at the till, so they must identify one row mart-wide. */
+    /**
+     * Barcodes are scanned at the till, so they must identify one row mart-wide.
+     */
     boolean existsByBarcode(String barcode);
 
     boolean existsByBarcodeAndIdNot(String barcode, Long id);
