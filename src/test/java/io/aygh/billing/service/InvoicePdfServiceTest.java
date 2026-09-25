@@ -11,9 +11,12 @@ import io.aygh.shared.entity.PaymentStatus;
 import io.aygh.shared.entity.TaxScheme;
 import io.aygh.shared.print.PosPaper;
 import io.aygh.shared.response.PrintPaperType;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -72,6 +75,7 @@ class InvoicePdfServiceTest {
                 "Test remark",
                 printCount,
                 printCount > 0,
+                true,
                 List.of(
                         new SaleItemResponse(1L, 101L, "Wai Wai Noodles", "WAI01", 1L, "Pcs",
                                 new BigDecimal("5"), new BigDecimal("5"), new BigDecimal("30.00"),
@@ -107,6 +111,72 @@ class InvoicePdfServiceTest {
             byte[] copyPdf = pdfService.renderTaxInvoice(sampleSale(3), paperType);
             assertNotNull(copyPdf, "Copy PDF should not be null for paper type: " + paperType);
             assertTrue(copyPdf.length > 0, "Copy PDF should contain bytes for paper type: " + paperType);
+        }
+    }
+
+    /** A PAN mart's bill: no VAT, the whole amount is the total. */
+    private SaleDetailResponse panSale() {
+        return new SaleDetailResponse(
+                2L, "INV-2081-0002", Instant.now(), SaleChannel.POS, TaxScheme.NON_VAT,
+                null, null, null, null, "2081.09.05", "2081.082",
+                new BigDecimal("300.00"), BigDecimal.ZERO, new BigDecimal("300.00"),
+                BigDecimal.ZERO, new BigDecimal("300.00"),
+                PaymentMethod.CASH, PaymentStatus.PAID, new BigDecimal("300.00"),
+                BigDecimal.ZERO, BigDecimal.ZERO, null, 1, true, true,
+                List.of(new SaleItemResponse(1L, 101L, "Wai Wai Noodles", "WAI01", 1L, "Pcs",
+                        new BigDecimal("10"), new BigDecimal("10"), new BigDecimal("30.00"),
+                        new BigDecimal("30.00"), BigDecimal.ZERO, new BigDecimal("300.00"))));
+    }
+
+    /** A VAT mart whose shelf prices carry VAT: 113 billed is 100 taxable + 13 VAT. */
+    private SaleDetailResponse vatIncludedSale() {
+        return new SaleDetailResponse(
+                3L, "INV-2081-0003", Instant.now(), SaleChannel.POS, TaxScheme.VAT,
+                null, null, null, null, "2081.09.05", "2081.082",
+                new BigDecimal("113.00"), BigDecimal.ZERO, new BigDecimal("100.00"),
+                new BigDecimal("13.00"), new BigDecimal("113.00"),
+                PaymentMethod.CASH, PaymentStatus.PAID, new BigDecimal("113.00"),
+                BigDecimal.ZERO, BigDecimal.ZERO, null, 1, true, true,
+                List.of(new SaleItemResponse(1L, 101L, "Amul Butter 500g", "BUT01", 1L, "Pkt",
+                        new BigDecimal("1"), new BigDecimal("1"), new BigDecimal("113.00"),
+                        new BigDecimal("113.00"), BigDecimal.ZERO, new BigDecimal("113.00"))));
+    }
+
+    private static String text(byte[] pdf) throws IOException {
+        try (var doc = Loader.loadPDF(pdf)) {
+            return new PDFTextStripper().getText(doc);
+        }
+    }
+
+    @Test
+    void panBillIsAPlainInvoiceStampedAsNotAVatBill() throws IOException {
+        for (PrintPaperType paperType : PrintPaperType.values()) {
+            String text = text(pdfService.renderTaxInvoice(panSale(), paperType));
+            assertTrue(text.contains("THIS IS NOT A VAT OR PAN BILL"), "notice missing on " + paperType);
+            assertFalse(text.toUpperCase().contains("TAX INVOICE"), "PAN bill titled as tax invoice on " + paperType);
+            assertFalse(text.contains("VAT 13 %"), "VAT row on PAN bill on " + paperType);
+        }
+    }
+
+    @Test
+    void vatBillIsATaxInvoiceWithoutThePanNotice() throws IOException {
+        for (PrintPaperType paperType : PrintPaperType.values()) {
+            String text = text(pdfService.renderTaxInvoice(sampleSale(1), paperType));
+            assertTrue(text.toUpperCase().contains("TAX INVOICE"), "title missing on " + paperType);
+            assertTrue(text.contains("VAT 13 %"), "VAT row missing on " + paperType);
+            assertFalse(text.contains("THIS IS NOT A VAT OR PAN BILL"), "PAN notice on VAT bill on " + paperType);
+        }
+    }
+
+    @Test
+    void vatInclusiveLinesArePrintedExclusiveOfVat() throws IOException {
+        for (PrintPaperType paperType : PrintPaperType.values()) {
+            String text = text(pdfService.renderVatInvoice(vatIncludedSale(), paperType));
+            // Rate, line total and taxable row all read 100.00; left VAT-inclusive,
+            // only the taxable row would, and the form would not add up.
+            long taxableFigures = text.lines().flatMap(l -> java.util.Arrays.stream(l.split("\\s+")))
+                    .filter("100.00"::equals).count();
+            assertTrue(taxableFigures >= 3, "lines not printed exclusive of VAT on " + paperType + ":\n" + text);
         }
     }
 

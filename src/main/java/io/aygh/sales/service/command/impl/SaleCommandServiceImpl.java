@@ -3,6 +3,9 @@ package io.aygh.sales.service.command.impl;
 import io.aygh.customer.entity.Customer;
 import io.aygh.customer.helper.CustomerResolver;
 import io.aygh.exception.BusinessException;
+import io.aygh.exception.CbmsSyncFailedException;
+import io.aygh.identity.entity.CbmsInternalEntity;
+import io.aygh.identity.service.CbmsInternalProvider;
 import io.aygh.inventory.entity.Product;
 import io.aygh.inventory.entity.ProductSellingUnit;
 import io.aygh.sales.dto.request.SaleItemRequest;
@@ -17,6 +20,8 @@ import io.aygh.sales.helper.SaleResolver;
 import io.aygh.sales.mapper.SaleMapper;
 import io.aygh.sales.repository.SaleRepository;
 import io.aygh.sales.service.command.SaleCommandService;
+import io.aygh.shared.cbms.CbmsClient;
+import io.aygh.shared.cbms.CbmsRequest;
 import io.aygh.shared.entity.PaymentMethod;
 import io.aygh.shared.service.NepaliDateUtils;
 import io.aygh.stock.entity.StockMovementType;
@@ -30,6 +35,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -46,6 +53,8 @@ public class SaleCommandServiceImpl implements SaleCommandService {
     private final SaleMapper saleMapper;
     private final InvoiceNumberGenerator invoiceNumbers;
     private final StockLedgerService stockLedger;
+    private final CbmsClient cbmsClient;
+    private final CbmsInternalProvider cbmsInternalProvider;
 
     @Override
     public SaleDetailResponse create(SaleRequest request) {
@@ -147,6 +156,13 @@ public class SaleCommandServiceImpl implements SaleCommandService {
                     "Invoice " + saved.getInvoiceNumber());
         }
 
+        // Last, once the bill is final: a rejection rolls the whole sale back,
+        // stock movements included, so no bill leaves the till unfiled.
+        if (!cbmsClient.sendCbmsBillingRequest(buildCbmsRequest(saved))) {
+            throw new CbmsSyncFailedException("CBMS rejected invoice " + saved.getInvoiceNumber() + ". Please try again.");
+        }
+        saved.setSyncWithIrd(true);
+
         log.info("Billed {} — {} line(s), net {}, {}",
                 saved.getInvoiceNumber(), saved.getItems().size(),
                 saved.getNetTotal(), saved.getPaymentStatus());
@@ -192,6 +208,37 @@ public class SaleCommandServiceImpl implements SaleCommandService {
                 .mrp(unit.getMrp())
                 .discountAmount(discount)
                 .lineTotal(gross.subtract(discount))
+                .build();
+    }
+
+    private CbmsRequest buildCbmsRequest(Sale sale) {
+        CbmsInternalEntity cbms = cbmsInternalProvider.getOrCreate();
+        return CbmsRequest.builder()
+                .username(cbms.getCbmsUsername())
+                .password(cbms.getCbmsPassword())
+                .sellerPan(cbms.getPan())
+                // The IRD's API wants empty strings, not nulls
+                .buyerName(sale.getCustomerName() != null ? sale.getCustomerName() : "")
+                .buyerPan(sale.getCustomerPan() != null ? sale.getCustomerPan() : "")
+                .fiscalYear(sale.getFiscalYear())
+                .invoiceNumber(sale.getInvoiceNumber())
+                .invoiceDate(sale.getNepaliDate() != null
+                        ? sale.getNepaliDate()
+                        : NepaliDateUtils.getIrdCompliantBsDate(sale.getSoldAt()))
+                .totalSales(sale.getNetTotal().doubleValue())
+                .taxableSalesVat(sale.getTaxableAmount().doubleValue())
+                .vat(sale.getVatAmount().doubleValue())
+                // Every nullable tax column is sent as zero, or the API fails to map it
+                .excisableAmount(0.0)
+                .excise(0.0)
+                .taxableSalesHst(0.0)
+                .hst(0.0)
+                .amountForEsf(0.0)
+                .esf(0.0)
+                .exportSales(0.0)
+                .taxExemptedSales(0.0)
+                .isRealTime(true)
+                .dateTimeClient(LocalDateTime.now(ZoneId.of("Asia/Kathmandu")))
                 .build();
     }
 }

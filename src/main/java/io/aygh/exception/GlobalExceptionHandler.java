@@ -41,6 +41,14 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(HttpStatus.BAD_REQUEST, ex.getMessage()));
     }
 
+    @ExceptionHandler(CbmsSyncFailedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleCbmsSyncFailed(CbmsSyncFailedException ex) {
+        log.warn("[503 SERVICE UNAVAILABLE] {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException ex) {
         List<ApiResponse.FieldError> fieldErrors = ex.getBindingResult()

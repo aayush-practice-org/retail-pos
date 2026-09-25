@@ -5,6 +5,7 @@ import io.aygh.sales.dto.response.SaleItemResponse;
 import io.aygh.sales.dto.response.SalesBookResponse;
 import io.aygh.sales.dto.response.SalesBookRowResponse;
 import io.aygh.sales.dto.response.SalesBookTotalResponse;
+import io.aygh.sales.helper.SaleCalculator;
 import io.aygh.shared.entity.PaymentStatus;
 import io.aygh.shared.entity.TaxScheme;
 import io.aygh.shared.print.PosLayout;
@@ -35,11 +36,32 @@ import java.util.List;
 /**
  * Renders sales as printable IRD invoices (responsive A4/A5/A6 Schedule 5 & POS thermal roll)
  * and generates the IRD Sales Book (A4 landscape).
+ *
+ * <h2>PAN and VAT billing</h2>
+ * What a mart may print depends on how it was registered with the IRD when the bill was
+ * raised, which the sale carries as its {@link TaxScheme}. There are two forms:
+ * <ul>
+ *   <li><b>VAT bill</b> ({@link #renderVatInvoice}) — a <em>Tax Invoice</em> that breaks the
+ *   bill into taxable amount and 13% VAT. Every figure above the VAT row is exclusive of
+ *   VAT, so a mart whose shelf prices already carry VAT prints its lines, unit prices and
+ *   discount at what they are worth before it; the total stays what was charged.</li>
+ *   <li><b>PAN bill</b> ({@link #renderPanInvoice}) — a plain <em>Invoice</em> that stops at
+ *   the total: no taxable split, no VAT row. While CBMS syncing is switched off nothing has
+ *   been filed under the mart's PAN either, so it is stamped {@link #PAN_BILL_NOTICE} under
+ *   the title, on the roll and on the page alike, and is never taken for a tax document.
+ *   Once {@code CbmsClientImpl} posts bills for real, this notice is the thing to revisit.</li>
+ * </ul>
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class InvoicePdfService {
+
+    /**
+     * Stamped under the title of a PAN bill. Upper case to match the COPY OF ORIGINAL
+     * stamp it sits beside on a reprint.
+     */
+    private static final String PAN_BILL_NOTICE = "THIS IS NOT A VAT OR PAN BILL";
 
     // ── Fonts (Standard Type-1, always available, no font embedding required) ─────
     private static final PDType1Font FONT_BOLD = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
@@ -95,27 +117,147 @@ public class InvoicePdfService {
     // ═══════════════════════════════════════════════════════════════════════
 
     /**
-     * Renders the tax invoice according to the requested paper type (MM80, MM75, A4, A5, A6).
+     * Renders the bill on the requested paper type (MM80, MM75, A4, A5, A6), as a VAT bill
+     * or a PAN bill according to the scheme the sale was raised under.
      */
     public byte[] renderTaxInvoice(SaleDetailResponse sale, PrintPaperType paperType) {
-        PrintPaperType type = paperType != null ? paperType : PrintPaperType.MM80;
-        if (type.isPos()) {
-            return renderReceipt(sale, type.toPosPaper());
-        }
-        return renderPageTaxInvoice(sale, type);
+        return sale.taxScheme() == TaxScheme.VAT
+                ? renderVatInvoice(sale, paperType)
+                : renderPanInvoice(sale, paperType);
+    }
+
+    /**
+     * The VAT bill: a Tax Invoice with taxable amount and VAT rows.
+     */
+    public byte[] renderVatInvoice(SaleDetailResponse sale, PrintPaperType paperType) {
+        return render(sale, paperType, BillForm.vat(sale));
+    }
+
+    /**
+     * The PAN bill: a plain Invoice, no VAT, stamped {@link #PAN_BILL_NOTICE}.
+     */
+    public byte[] renderPanInvoice(SaleDetailResponse sale, PrintPaperType paperType) {
+        return render(sale, paperType, BillForm.pan());
     }
 
     /**
      * The filed copy: A4, itemised, with the mart's registration details.
      */
     public byte[] renderA4(SaleDetailResponse sale) {
-        return renderPageTaxInvoice(sale, PrintPaperType.A4);
+        return renderTaxInvoice(sale, PrintPaperType.A4);
     }
 
     /**
      * The counter copy, on whatever roll the till feeds.
      */
     public byte[] renderReceipt(SaleDetailResponse sale, PosPaper paper) {
+        return renderReceipt(sale, paper, BillForm.of(sale));
+    }
+
+    private byte[] render(SaleDetailResponse sale, PrintPaperType paperType, BillForm form) {
+        PrintPaperType type = paperType != null ? paperType : PrintPaperType.MM80;
+        if (type.isPos()) {
+            return renderReceipt(sale, type.toPosPaper(), form);
+        }
+        return renderPageTaxInvoice(sale, type, form);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // PAN / VAT bill forms
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * What sets a PAN bill apart from a VAT bill on paper.
+     *
+     * @param title     printed at the head of the form
+     * @param vat       whether the taxable amount and VAT rows are printed
+     * @param stripVat  whether the line figures carry VAT that has to come out of them
+     * @param notice    stamped under the title, or null
+     */
+    private record BillForm(String title, boolean vat, boolean stripVat, String notice) {
+
+        static BillForm of(SaleDetailResponse sale) {
+            return sale.taxScheme() == TaxScheme.VAT ? vat(sale) : pan();
+        }
+
+        static BillForm pan() {
+            return new BillForm("Invoice", false, false, PAN_BILL_NOTICE);
+        }
+
+        static BillForm vat(SaleDetailResponse sale) {
+            return new BillForm("Tax Invoice", true, taxIncluded(sale), null);
+        }
+
+        /**
+         * Whether the shelf prices on this bill carried VAT. Read off the bill itself
+         * rather than today's CBMS setup, so a reprint prints as it was billed: VAT
+         * added on top makes the total exceed the discounted basket, VAT taken out of
+         * the price leaves the two equal.
+         */
+        private static boolean taxIncluded(SaleDetailResponse sale) {
+            if (sale.netTotal() == null || sale.subTotal() == null || !isPositive(sale.vatAmount())) {
+                return false;
+            }
+            BigDecimal discount = sale.discountAmount() != null ? sale.discountAmount() : BigDecimal.ZERO;
+            return sale.netTotal().compareTo(sale.subTotal().subtract(discount)) == 0;
+        }
+    }
+
+    /**
+     * The figures printed above the summary rows. On a bill whose prices carried VAT
+     * every one of them is shown exclusive of it, so reading the form down — items,
+     * less discount, taxable amount — adds up.
+     */
+    private record PrintedFigures(List<BigDecimal> rates, List<BigDecimal> lineDiscounts,
+                                  List<BigDecimal> lineTotals, BigDecimal subTotal, BigDecimal discount) {
+    }
+
+    /**
+     * Each line is rounded to the paisa on its own, so on a VAT-inclusive bill their sum
+     * can land a paisa either side of the amount the bill was actually taxed on. That
+     * amount stands, and the drift is carried on the last line charged for at all.
+     */
+    private static PrintedFigures printedFigures(SaleDetailResponse sale, BillForm form) {
+        List<SaleItemResponse> items = sale.items() != null ? sale.items() : List.of();
+        BigDecimal discount = sale.discountAmount() != null ? sale.discountAmount() : BigDecimal.ZERO;
+
+        List<BigDecimal> rates = new ArrayList<>();
+        List<BigDecimal> lineDiscounts = new ArrayList<>();
+        List<BigDecimal> lineTotals = new ArrayList<>();
+        for (SaleItemResponse item : items) {
+            rates.add(printed(item.rate(), form));
+            lineDiscounts.add(printed(item.discountAmount(), form));
+            lineTotals.add(printed(item.lineTotal(), form));
+        }
+
+        if (!form.stripVat()) {
+            return new PrintedFigures(rates, lineDiscounts, lineTotals, sale.subTotal(), discount);
+        }
+
+        BigDecimal printedDiscount = SaleCalculator.excludeVat(discount);
+        BigDecimal subTotal = sale.taxableAmount().add(printedDiscount);
+
+        int lastCharged = -1;
+        for (int i = lineTotals.size() - 1; i >= 0; i--) {
+            if (lineTotals.get(i).signum() != 0) {
+                lastCharged = i;
+                break;
+            }
+        }
+        if (lastCharged >= 0) {
+            BigDecimal drift = subTotal.subtract(lineTotals.stream().reduce(BigDecimal.ZERO, BigDecimal::add));
+            lineTotals.set(lastCharged, lineTotals.get(lastCharged).add(drift));
+        }
+
+        return new PrintedFigures(rates, lineDiscounts, lineTotals, subTotal, printedDiscount);
+    }
+
+    private static BigDecimal printed(BigDecimal amount, BillForm form) {
+        BigDecimal value = amount != null ? amount : BigDecimal.ZERO;
+        return form.stripVat() ? SaleCalculator.excludeVat(value) : value;
+    }
+
+    private byte[] renderReceipt(SaleDetailResponse sale, PosPaper paper, BillForm form) {
         MartBranding branding = brandingService.resolve();
         PosLayout layout = PosLayout.of(paper);
         log.debug("Rendering {} receipt for {}", paper, sale.invoiceNumber());
@@ -123,7 +265,7 @@ public class InvoicePdfService {
         try (PDDocument document = new PDDocument();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
 
-            drawReceipt(document, sale, branding, layout);
+            drawReceipt(document, sale, branding, layout, form);
             document.save(out);
             return out.toByteArray();
 
@@ -136,9 +278,9 @@ public class InvoicePdfService {
     // Responsive Page Invoice (A4, A5, A6 - Schedule 5 Boxed Table Layout)
     // ═══════════════════════════════════════════════════════════════════════
 
-    private byte[] renderPageTaxInvoice(SaleDetailResponse sale, PrintPaperType paperType) {
-        boolean vatRegistered = sale.taxScheme() == TaxScheme.VAT;
-        String title = vatRegistered ? "Tax Invoice" : "Invoice";
+    private byte[] renderPageTaxInvoice(SaleDetailResponse sale, PrintPaperType paperType, BillForm form) {
+        boolean vatRegistered = form.vat();
+        String title = form.title();
         MartBranding branding = brandingService.resolve();
 
         PDRectangle pageSize = paperType.toPageSize();
@@ -161,7 +303,7 @@ public class InvoicePdfService {
         float lineDrop = bodySize + 3f;
 
         List<SaleItemResponse> items = sale.items() != null ? sale.items() : List.of();
-        BigDecimal discount = sale.discountAmount() != null ? sale.discountAmount() : BigDecimal.ZERO;
+        PrintedFigures figures = printedFigures(sale, form);
 
         float[] xs = {
                 margin,
@@ -229,6 +371,13 @@ public class InvoicePdfService {
                     y -= (subtitleSize * ASCENT_RATIO + 2f);
                     PosText.drawCentered(cs, FONT_BOLD, subtitleSize,
                             "COPY OF ORIGINAL (" + printNumber + ")", y, margin, contentWidth);
+                    y -= (subtitleSize * 0.35f + 4f);
+                }
+
+                if (form.notice() != null) {
+                    y -= (subtitleSize * ASCENT_RATIO + 2f);
+                    PosText.drawCentered(cs, FONT_BOLD, subtitleSize,
+                            form.notice(), y, margin, contentWidth);
                     y -= (subtitleSize * 0.35f + 4f);
                 }
 
@@ -306,7 +455,7 @@ public class InvoicePdfService {
                         y = drawPageGridRow(cs, y, xs, headerCells, colAlign, FONT_BOLD, bodySize, lineDrop, cellPad);
                     }
 
-                    BigDecimal rate = item.rate() != null ? item.rate() : BigDecimal.ZERO;
+                    BigDecimal rate = figures.rates().get(i);
                     String qtyStr = quantity(item.quantity()) + (notBlank(item.unitSymbol()) ? " " + item.unitSymbol() : "");
 
                     String[][] itemCells = {
@@ -314,7 +463,7 @@ public class InvoicePdfService {
                             nameLines.toArray(new String[0]),
                             {qtyStr},
                             {money(rate)},
-                            {money(item.lineTotal())}
+                            {money(figures.lineTotals().get(i))}
                     };
                     y = drawPageGridRow(cs, y, xs, itemCells, colAlign, FONT_REGULAR, bodySize, lineDrop, cellPad);
                 }
@@ -337,7 +486,7 @@ public class InvoicePdfService {
 
                 y = drawPageGridRow(cs, y, summaryXs, new String[][]{
                         {"Discount"},
-                        {money(discount)}
+                        {money(figures.discount())}
                 }, summaryAlign, FONT_REGULAR, bodySize, lineDrop, cellPad);
 
                 if (vatRegistered) {
@@ -643,36 +792,41 @@ public class InvoicePdfService {
         }
     }
 
-    private void drawReceipt(PDDocument document, SaleDetailResponse sale,
-                             MartBranding branding, PosLayout layout) throws IOException {
+    private void drawReceipt(PDDocument document, SaleDetailResponse sale, MartBranding branding,
+                             PosLayout layout, BillForm form) throws IOException {
 
-        List<ItemBlock> blocks = buildItemBlocks(sale, layout);
-        float height = measureReceipt(sale, branding, layout, blocks);
+        PrintedFigures figures = printedFigures(sale, form);
+        List<ItemBlock> blocks = buildItemBlocks(sale, figures, layout);
+        // Wrapped once, so the roll is measured from exactly what is drawn on it
+        List<String> noticeLines = form.notice() == null ? List.of()
+                : PosText.wrap(FONT_BOLD, layout.subtitleSize(), form.notice(), layout.contentWidth());
+        float height = measureReceipt(sale, form, branding, layout, blocks, noticeLines);
 
         PDPage page = new PDPage(new PDRectangle(layout.width(), height));
         document.addPage(page);
 
         try (PDPageContentStream cs = new PDPageContentStream(document, page)) {
             float y = height - layout.margin();
-            y = drawReceiptHeader(cs, branding, sale, layout, y);
+            y = drawReceiptHeader(cs, branding, sale, form, noticeLines, layout, y);
             y = drawReceiptItems(cs, layout, blocks, y);
-            y = drawReceiptTotals(cs, sale, layout, y);
+            y = drawReceiptTotals(cs, sale, form, figures, layout, y);
             drawReceiptFooter(cs, sale, layout, y);
         }
     }
 
-    private float measureReceipt(SaleDetailResponse sale, MartBranding branding,
-                                 PosLayout layout, List<ItemBlock> blocks) {
+    private float measureReceipt(SaleDetailResponse sale, BillForm form, MartBranding branding,
+                                 PosLayout layout, List<ItemBlock> blocks, List<String> noticeLines) {
 
         float height = layout.margin() * 2;
         height += receiptHeaderHeight(branding, sale, layout);
+        height += noticeLines.size() * layout.lineHeight();
 
         for (ItemBlock block : blocks) {
             height += block.lineCount() * layout.lineHeight();
         }
 
         height += layout.dividerGap() * 2;
-        height += receiptTotalsHeight(sale, layout);
+        height += receiptTotalsHeight(sale, form, layout);
         height += layout.sectionGap() + layout.lineHeight() * 4;
 
         return height;
@@ -693,22 +847,23 @@ public class InvoicePdfService {
         return height;
     }
 
-    private float receiptTotalsHeight(SaleDetailResponse sale, PosLayout layout) {
+    private float receiptTotalsHeight(SaleDetailResponse sale, BillForm form, PosLayout layout) {
         int lines = 2;
-        if (isPositive(sale.discountAmount())) lines += 2;
-        if (sale.taxScheme() == TaxScheme.VAT) lines++;
+        if (isPositive(sale.discountAmount())) lines++;
+        if (form.vat()) lines += 2;
         if (isPositive(sale.paidAmount())) lines++;
         if (isPositive(sale.changeAmount())) lines++;
         if (isPositive(sale.dueAmount())) lines++;
         return lines * layout.lineHeight();
     }
 
-    private List<ItemBlock> buildItemBlocks(SaleDetailResponse sale, PosLayout layout) {
+    private List<ItemBlock> buildItemBlocks(SaleDetailResponse sale, PrintedFigures figures, PosLayout layout) {
         float amountWidth = PosText.widthOf(FONT_REGULAR, layout.bodySize(), "0000000.00");
         float nameWidth = layout.contentWidth() - amountWidth - 4;
 
         List<ItemBlock> blocks = new ArrayList<>(sale.items().size());
-        for (SaleItemResponse item : sale.items()) {
+        for (int i = 0; i < sale.items().size(); i++) {
+            SaleItemResponse item = sale.items().get(i);
             List<String> nameLines = PosText.wrap(FONT_BOLD, layout.bodySize(), item.productName(), nameWidth);
             if (nameLines.isEmpty()) {
                 nameLines = List.of("-");
@@ -716,15 +871,16 @@ public class InvoicePdfService {
 
             blocks.add(new ItemBlock(
                     nameLines,
-                    quantity(item.quantity()) + " " + item.unitSymbol() + " x " + money(item.rate()),
-                    money(item.lineTotal()),
-                    isPositive(item.discountAmount()) ? "less disc " + money(item.discountAmount()) : null));
+                    quantity(item.quantity()) + " " + item.unitSymbol() + " x " + money(figures.rates().get(i)),
+                    money(figures.lineTotals().get(i)),
+                    isPositive(item.discountAmount()) ? "less disc " + money(figures.lineDiscounts().get(i)) : null));
         }
         return blocks;
     }
 
-    private float drawReceiptHeader(PDPageContentStream cs, MartBranding branding,
-                                    SaleDetailResponse sale, PosLayout layout, float y) throws IOException {
+    private float drawReceiptHeader(PDPageContentStream cs, MartBranding branding, SaleDetailResponse sale,
+                                    BillForm form, List<String> noticeLines, PosLayout layout, float y)
+            throws IOException {
 
         PosText.drawCentered(cs, FONT_BOLD, layout.titleSize(),
                 upper(branding.companyName()), y, layout.margin(), layout.contentWidth());
@@ -743,13 +899,19 @@ public class InvoicePdfService {
         }
 
         int printNumber = Math.max(1, sale.printCount() != null ? sale.printCount() : 1);
-        PosText.drawCentered(cs, FONT_BOLD, layout.subtitleSize(), documentTitle(sale),
+        PosText.drawCentered(cs, FONT_BOLD, layout.subtitleSize(), form.title().toUpperCase(),
                 y, layout.margin(), layout.contentWidth());
         y -= layout.lineHeight();
 
         if (printNumber > 1) {
             PosText.drawCentered(cs, FONT_BOLD, layout.subtitleSize(),
                     "COPY OF ORIGINAL (" + printNumber + ")", y, layout.margin(), layout.contentWidth());
+            y -= layout.lineHeight();
+        }
+
+        for (String line : noticeLines) {
+            PosText.drawCentered(cs, FONT_BOLD, layout.subtitleSize(), line,
+                    y, layout.margin(), layout.contentWidth());
             y -= layout.lineHeight();
         }
 
@@ -815,18 +977,19 @@ public class InvoicePdfService {
         return y;
     }
 
-    private float drawReceiptTotals(PDPageContentStream cs, SaleDetailResponse sale,
-                                    PosLayout layout, float y) throws IOException {
+    private float drawReceiptTotals(PDPageContentStream cs, SaleDetailResponse sale, BillForm form,
+                                    PrintedFigures figures, PosLayout layout, float y) throws IOException {
 
         y = PosText.drawDashedDivider(cs, layout, y, 0.5f);
 
-        y = receiptTotalLine(cs, layout, "Sub total", money(sale.subTotal()), y, false);
+        y = receiptTotalLine(cs, layout, "Sub total", money(figures.subTotal()), y, false);
         if (isPositive(sale.discountAmount())) {
-            y = receiptTotalLine(cs, layout, "Discount", "- " + money(sale.discountAmount()), y, false);
-            y = receiptTotalLine(cs, layout, "Taxable", money(sale.taxableAmount()), y, false);
+            y = receiptTotalLine(cs, layout, "Discount", "- " + money(figures.discount()), y, false);
         }
-        if (sale.taxScheme() == TaxScheme.VAT) {
-            y = receiptTotalLine(cs, layout, "VAT", money(sale.vatAmount()), y, false);
+        // Only a VAT bill splits the total; a PAN bill charges no VAT at all
+        if (form.vat()) {
+            y = receiptTotalLine(cs, layout, "Taxable", money(sale.taxableAmount()), y, false);
+            y = receiptTotalLine(cs, layout, "VAT 13 %", money(sale.vatAmount()), y, false);
         }
 
         y = receiptTotalLine(cs, layout, "TOTAL", money(sale.netTotal()), y, true);
@@ -924,10 +1087,6 @@ public class InvoicePdfService {
     // ═══════════════════════════════════════════════════════════════════════
     // Helpers
     // ═══════════════════════════════════════════════════════════════════════
-
-    private static String documentTitle(SaleDetailResponse sale) {
-        return sale.taxScheme() == TaxScheme.VAT ? "TAX INVOICE" : "INVOICE";
-    }
 
     private static String contactLine(MartBranding branding) {
         return join(" · ",

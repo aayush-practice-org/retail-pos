@@ -70,6 +70,7 @@ public class SaleMapper {
                 sale.getRemark(),
                 sale.getPrintCount() != null ? sale.getPrintCount() : 0,
                 sale.getIsBillPrinted() != null ? sale.getIsBillPrinted() : false,
+                sale.getSyncWithIrd() != null ? sale.getSyncWithIrd() : false,
                 items);
     }
 

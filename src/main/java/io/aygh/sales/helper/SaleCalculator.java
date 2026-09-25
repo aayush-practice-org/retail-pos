@@ -3,7 +3,7 @@ package io.aygh.sales.helper;
 import io.aygh.config.properties.TaxProperties;
 import io.aygh.identity.entity.CbmsInternalEntity;
 import io.aygh.identity.entity.TaxRegistration;
-import io.aygh.identity.repository.CbmsInternalRepository;
+import io.aygh.identity.service.CbmsInternalProvider;
 import io.aygh.sales.entity.Sale;
 import io.aygh.sales.entity.SaleItem;
 import io.aygh.shared.entity.TaxScheme;
@@ -20,7 +20,7 @@ import java.util.List;
  * <p>
  * VAT behaviour is driven entirely by the tenant's CBMS configuration:
  * <ul>
- *   <li>No config / PAN-registered  → no VAT (NON_VAT scheme)</li>
+ *   <li>PAN-registered (the default) → no VAT (NON_VAT scheme)</li>
  *   <li>VAT-registered + tax included  → extract VAT from price (price / 1.13)</li>
  *   <li>VAT-registered + tax excluded  → add VAT on top (price x 1.13)</li>
  * </ul>
@@ -36,7 +36,7 @@ public class SaleCalculator {
     private static final BigDecimal VAT_DIVISOR = new BigDecimal("1.13");
 
     private final TaxProperties taxProperties;
-    private final CbmsInternalRepository cbmsInternalRepository;
+    private final CbmsInternalProvider cbmsInternalProvider;
 
     public void applyTotals(Sale sale, List<SaleItem> items) {
         BigDecimal subTotal = items.stream()
@@ -51,22 +51,21 @@ public class SaleCalculator {
         BigDecimal gross = subTotal.subtract(discount);
 
         // Derive VAT behaviour from CBMS configuration
-        CbmsInternalEntity cbms = cbmsInternalRepository.findFirstByOrderByIdAsc().orElse(null);
-        boolean vatRegistered = cbms != null
-                && cbms.getTaxRegistration() == TaxRegistration.VAT_REGISTERED;
+        CbmsInternalEntity cbms = cbmsInternalProvider.getOrCreate();
+        boolean vatRegistered = cbms.getTaxRegistration() == TaxRegistration.VAT_REGISTERED;
 
         BigDecimal taxable;
         BigDecimal vat;
         TaxScheme scheme;
 
         if (!vatRegistered) {
-            // PAN-registered or no CBMS config — no VAT at all
+            // PAN-registered — no VAT at all
             taxable = gross;
             vat = BigDecimal.ZERO;
             scheme = TaxScheme.NON_VAT;
         } else if (cbms.isTaxIncluded()) {
             // Prices already carry VAT: extract it (e.g. 113 net -> 100 taxable + 13 VAT)
-            taxable = gross.divide(VAT_DIVISOR, MONEY_SCALE, RoundingMode.HALF_UP);
+            taxable = excludeVat(gross);
             vat = gross.subtract(taxable).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
             scheme = TaxScheme.VAT;
         } else {
@@ -84,6 +83,15 @@ public class SaleCalculator {
         sale.setVatAmount(vat);
         sale.setNetTotal(taxable.add(vat));
         sale.setTaxScheme(scheme);
+    }
+
+    /**
+     * What a price that already carries VAT is worth before it — the figure a tax
+     * invoice prints, since every line above the VAT row is exclusive of VAT.
+     */
+    public static BigDecimal excludeVat(BigDecimal gross) {
+        return (gross == null ? BigDecimal.ZERO : gross)
+                .divide(VAT_DIVISOR, MONEY_SCALE, RoundingMode.HALF_UP);
     }
 
     /** The rate a VAT bill raised now is charged at, for printing on the invoice. */
