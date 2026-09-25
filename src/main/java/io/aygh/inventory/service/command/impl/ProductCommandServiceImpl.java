@@ -112,7 +112,7 @@ public class ProductCommandServiceImpl implements ProductCommandService {
         ProductCreateRequest create = new ProductCreateRequest();
         create.setName(request.name());
         create.setCategoryId(request.categoryId() == null ? defaultCategoryId() : request.categoryId());
-        create.setBarcode(request.barcode().strip());
+        create.setBarcode(strip(request.barcode()));
         create.setSellingPrice(request.sellingPrice());
         create.setPurchasePrice(request.purchasePrice());
 
@@ -252,7 +252,7 @@ public class ProductCommandServiceImpl implements ProductCommandService {
                     .sellingPrice(line.price())
                     .mrp(line.mrp())
                     .sku(line.sku())
-                    .barcode(line.barcode().strip())
+                    .barcode(strip(line.barcode()))
                     .isDefault(i == defaultAt)
                     .active(true)
                     .build());
@@ -287,7 +287,13 @@ public class ProductCommandServiceImpl implements ProductCommandService {
         }
     }
 
-    /** A line naming no unit means the base unit — that is what makes the shorthand work. */
+    private static String strip(String value) {
+        return value == null ? null : value.strip();
+    }
+
+    /**
+     * A line naming no unit means the base unit — that is what makes the shorthand work.
+     */
     private Unit unitFor(Product product, ProductUnitLineRequest line) {
         return line.namesUnit() ? unitFactory.resolve(line) : product.getBaseUnit();
     }
