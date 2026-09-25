@@ -42,6 +42,8 @@ public record SaleDetailResponse(
         String remark,
         Integer printCount,
         Boolean isBillPrinted,
+        /** Whether the IRD's CBMS accepted this bill. */
+        Boolean syncWithIrd,
         List<SaleItemResponse> items
 ) {
 }

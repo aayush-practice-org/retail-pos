@@ -27,15 +27,21 @@ public class CbmsInternalEntity extends BaseEntity {
     @Column(name = "tenant_slug", length = 63)
     private String tenantSlug;
 
-    @Column(name = "cbms_username", nullable = false)
+    /** Empty until the admin enters the mart's CBMS credentials. */
+    @Column(name = "cbms_username")
     private String cbmsUsername;
 
-    @Column(name = "cbms_password", nullable = false)
+    @Column(name = "cbms_password")
     private String cbmsPassword;
 
+    /**
+     * Every mart is PAN registered unless someone says otherwise: VAT billing is
+     * not being issued yet, so a setup without an explicit registration charges no VAT.
+     */
     @Enumerated(EnumType.STRING)
     @Column(name = "tax_registration", nullable = false, length = 50)
-    private TaxRegistration taxRegistration;
+    @Builder.Default
+    private TaxRegistration taxRegistration = TaxRegistration.PAN_REGISTERED;
 
     /**
      * true  -> item rates / MRP already carry VAT (e.g. 100 net -> 88.50 taxable + 11.50 VAT)

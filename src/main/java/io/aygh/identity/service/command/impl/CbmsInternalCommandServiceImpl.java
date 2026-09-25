@@ -6,6 +6,7 @@ import io.aygh.identity.dto.request.CbmsInternalUpdateRequest;
 import io.aygh.identity.dto.response.CbmsInternalResponse;
 import io.aygh.identity.entity.Admin;
 import io.aygh.identity.entity.CbmsInternalEntity;
+import io.aygh.identity.entity.TaxRegistration;
 import io.aygh.identity.mapper.CbmsInternalMapper;
 import io.aygh.identity.repository.AdminRepository;
 import io.aygh.identity.repository.CbmsInternalRepository;
@@ -43,7 +44,9 @@ public class CbmsInternalCommandServiceImpl implements CbmsInternalCommandServic
         entity.setTenantSlug(tenantSlug);
         entity.setCbmsUsername(request.cbmsUsername());
         entity.setCbmsPassword(request.cbmsPassword());
-        entity.setTaxRegistration(request.taxRegistration());
+        entity.setTaxRegistration(request.taxRegistration() != null
+                ? request.taxRegistration()
+                : TaxRegistration.PAN_REGISTERED);
         entity.setTaxIncluded(request.taxIncluded());
         entity.setPan(admin.getRegistrationNumber());
 

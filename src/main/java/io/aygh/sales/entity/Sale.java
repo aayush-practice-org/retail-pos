@@ -105,6 +105,11 @@ public class Sale extends BaseEntity {
     @Builder.Default
     private Boolean isBillPrinted = false;
 
+    /** Whether the IRD's CBMS accepted this bill. */
+    @Column(name = "sync_with_ird", nullable = false)
+    @Builder.Default
+    private Boolean syncWithIrd = false;
+
     // ── Money ─────────────────────────────────────────────────────────────
 
     @Column(name = "sub_total", nullable = false, precision = 14, scale = 2)
