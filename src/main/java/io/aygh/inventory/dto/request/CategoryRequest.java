@@ -12,7 +12,6 @@ public record CategoryRequest(
         @Size(max = 255)
         String description,
 
-        @Size(max = 255)
         String image
 ) {
 }
