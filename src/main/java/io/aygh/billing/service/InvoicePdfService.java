@@ -798,27 +798,28 @@ public class InvoicePdfService {
         PrintedFigures figures = printedFigures(sale, form);
         List<ItemBlock> blocks = buildItemBlocks(sale, figures, layout);
         // Wrapped once, so the roll is measured from exactly what is drawn on it
+        ReceiptHeader header = receiptHeader(branding, layout);
         List<String> noticeLines = form.notice() == null ? List.of()
                 : PosText.wrap(FONT_BOLD, layout.subtitleSize(), form.notice(), layout.contentWidth());
-        float height = measureReceipt(sale, form, branding, layout, blocks, noticeLines);
+        float height = measureReceipt(sale, form, header, layout, blocks, noticeLines);
 
         PDPage page = new PDPage(new PDRectangle(layout.width(), height));
         document.addPage(page);
 
         try (PDPageContentStream cs = new PDPageContentStream(document, page)) {
             float y = height - layout.margin();
-            y = drawReceiptHeader(cs, branding, sale, form, noticeLines, layout, y);
+            y = drawReceiptHeader(cs, header, sale, form, noticeLines, layout, y);
             y = drawReceiptItems(cs, layout, blocks, y);
             y = drawReceiptTotals(cs, sale, form, figures, layout, y);
             drawReceiptFooter(cs, sale, layout, y);
         }
     }
 
-    private float measureReceipt(SaleDetailResponse sale, BillForm form, MartBranding branding,
+    private float measureReceipt(SaleDetailResponse sale, BillForm form, ReceiptHeader header,
                                  PosLayout layout, List<ItemBlock> blocks, List<String> noticeLines) {
 
         float height = layout.margin() * 2;
-        height += receiptHeaderHeight(branding, sale, layout);
+        height += receiptHeaderHeight(header, sale, layout);
         height += noticeLines.size() * layout.lineHeight();
 
         for (ItemBlock block : blocks) {
@@ -832,10 +833,37 @@ public class InvoicePdfService {
         return height;
     }
 
-    private float receiptHeaderHeight(MartBranding branding, SaleDetailResponse sale, PosLayout layout) {
-        float height = layout.lineHeight() * 2;
-        if (contactLine(branding) != null) height += layout.lineHeight();
-        if (notBlank(branding.registrationNumber())) height += layout.lineHeight();
+    /**
+     * Branding lines, already word-wrapped to the content column. Drawn as single centered
+     * strings, a company name wider than the roll started left of the margin and ran past
+     * the right edge, so the print head clipped both ends.
+     */
+    private record ReceiptHeader(List<String> nameLines, List<String> contactLines,
+                                 List<String> registrationLines) {
+    }
+
+    private static ReceiptHeader receiptHeader(MartBranding branding, PosLayout layout) {
+        String companyName = upper(branding.companyName());
+        List<String> nameLines = PosText.wrap(FONT_BOLD, layout.titleSize(), companyName, layout.contentWidth());
+        if (nameLines.isEmpty()) nameLines = List.of(companyName);
+
+        List<String> contactLines =
+                PosText.wrap(FONT_REGULAR, layout.smallSize(), contactLine(branding), layout.contentWidth());
+
+        List<String> registrationLines = notBlank(branding.registrationNumber())
+                ? PosText.wrap(FONT_REGULAR, layout.smallSize(),
+                        "PAN/VAT: " + branding.registrationNumber(), layout.contentWidth())
+                : List.of();
+
+        return new ReceiptHeader(nameLines, contactLines, registrationLines);
+    }
+
+    private float receiptHeaderHeight(ReceiptHeader header, SaleDetailResponse sale, PosLayout layout) {
+        float height = layout.titleSize() * ASCENT_RATIO; // ascender clearance for the first line
+        height += header.nameLines().size() * (layout.titleSize() + 4);
+        height += header.contactLines().size() * layout.lineHeight();
+        height += header.registrationLines().size() * layout.lineHeight();
+        height += layout.lineHeight(); // form title
         int printNumber = Math.max(1, sale.printCount() != null ? sale.printCount() : 1);
         if (printNumber > 1) height += layout.lineHeight() * 2;
         height += layout.dividerGap() * 2;
@@ -878,23 +906,24 @@ public class InvoicePdfService {
         return blocks;
     }
 
-    private float drawReceiptHeader(PDPageContentStream cs, MartBranding branding, SaleDetailResponse sale,
+    private float drawReceiptHeader(PDPageContentStream cs, ReceiptHeader header, SaleDetailResponse sale,
                                     BillForm form, List<String> noticeLines, PosLayout layout, float y)
             throws IOException {
 
-        PosText.drawCentered(cs, FONT_BOLD, layout.titleSize(),
-                upper(branding.companyName()), y, layout.margin(), layout.contentWidth());
-        y -= layout.lineHeight();
+        // The caller hands in the top margin as a baseline, but glyphs rise above their
+        // baseline — without this drop the company name is shaved off along the top edge.
+        y -= layout.titleSize() * ASCENT_RATIO;
 
-        String contact = contactLine(branding);
-        if (contact != null) {
-            PosText.drawCentered(cs, FONT_REGULAR, layout.smallSize(), contact,
-                    y, layout.margin(), layout.contentWidth());
+        for (String line : header.nameLines()) {
+            PosText.drawCentered(cs, FONT_BOLD, layout.titleSize(), line, y, layout.margin(), layout.contentWidth());
+            y -= layout.titleSize() + 4;
+        }
+        for (String line : header.contactLines()) {
+            PosText.drawCentered(cs, FONT_REGULAR, layout.smallSize(), line, y, layout.margin(), layout.contentWidth());
             y -= layout.lineHeight();
         }
-        if (notBlank(branding.registrationNumber())) {
-            PosText.drawCentered(cs, FONT_REGULAR, layout.smallSize(),
-                    "PAN/VAT: " + branding.registrationNumber(), y, layout.margin(), layout.contentWidth());
+        for (String line : header.registrationLines()) {
+            PosText.drawCentered(cs, FONT_REGULAR, layout.smallSize(), line, y, layout.margin(), layout.contentWidth());
             y -= layout.lineHeight();
         }
 
