@@ -6,7 +6,6 @@ import io.aygh.sales.dto.response.SalesBookResponse;
 import io.aygh.sales.dto.response.SalesBookRowResponse;
 import io.aygh.sales.dto.response.SalesBookTotalResponse;
 import io.aygh.sales.helper.SaleCalculator;
-import io.aygh.shared.entity.PaymentStatus;
 import io.aygh.shared.entity.TaxScheme;
 import io.aygh.shared.print.PosLayout;
 import io.aygh.shared.print.PosPaper;
@@ -32,6 +31,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Renders sales as printable IRD invoices (responsive A4/A5/A6 Schedule 5 & POS thermal roll)
@@ -257,19 +257,134 @@ public class InvoicePdfService {
         return form.stripVat() ? SaleCalculator.excludeVat(value) : value;
     }
 
+    /**
+     * Renders the IRD invoice form on a thermal roll, laid out the same way as the restaurant
+     * kiosk's roll invoice: header, stamps, seller / bill / buyer fields, payment method, one
+     * block per line, the summary rows, amount in words, signature and footer.
+     * <p>
+     * The form's five columns (S.No. / Details / Quantity / Per Unit / Total) cannot sit side
+     * by side across a roll, so each line prints as a block instead: serial number and
+     * description first, quantity and unit price under them, the line total against the right
+     * edge. All content is wrapped to the content column ONCE and that same wrapped content is
+     * both measured and drawn, so the roll can never be cut short of the print.
+     */
     private byte[] renderReceipt(SaleDetailResponse sale, PosPaper paper, BillForm form) {
         MartBranding branding = brandingService.resolve();
         PosLayout layout = PosLayout.of(paper);
         log.debug("Rendering {} receipt for {}", paper, sale.invoiceNumber());
 
-        try (PDDocument document = new PDDocument();
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+        int printNumber = printNumber(sale);
+        List<SaleItemResponse> items = sale.items() != null ? sale.items() : List.of();
+        PrintedFigures figures = printedFigures(sale, form);
 
-            drawReceipt(document, sale, branding, layout, form);
-            document.save(out);
+        PosHeaderContent header = posHeaderContent(branding, form.title(), layout);
+
+        // What is stamped under the title: the copy number on a reprint, and on a PAN bill
+        // the notice that it is not a VAT bill. Both are measured from this one list.
+        List<String> stampLines = new ArrayList<>();
+        if (printNumber > 1) {
+            stampLines.addAll(PosText.wrap(FONT_BOLD, layout.subtitleSize(),
+                    "COPY OF ORIGINAL (" + printNumber + ")", layout.contentWidth()));
+        }
+        if (form.notice() != null) {
+            stampLines.addAll(PosText.wrap(FONT_BOLD, layout.subtitleSize(),
+                    form.notice(), layout.contentWidth()));
+        }
+
+        // The mart's name and PAN are already printed in the header, so only the address —
+        // which the header does not carry — is repeated as a field.
+        List<String> sellerMeta = new ArrayList<>();
+        addPosMetaLine(sellerMeta, "Seller's Address", branding.companyAddress(), layout);
+
+        String txnDate = transactionDate(sale);
+        List<String> billMeta = new ArrayList<>();
+        addPosMetaLine(billMeta, "Bill Number", sale.invoiceNumber(), layout);
+        addPosMetaLine(billMeta, "Fiscal Year", sale.fiscalYear(), layout);
+        addPosMetaLine(billMeta, "Transactions Date", txnDate, layout);
+        addPosMetaLine(billMeta, "Invoice Issue Date", txnDate, layout);
+        addPosMetaLine(billMeta, "Print Count", printNumber, layout);
+        addPosMetaLine(billMeta, "Payment Status", enumLabel(sale.paymentStatus()), layout);
+
+        List<String> buyerMeta = new ArrayList<>();
+        addPosMetaLine(buyerMeta, "Purchaser's Name", sale.customerName(), layout);
+        addPosMetaLine(buyerMeta, "Purchaser's PAN", sale.customerPan(), layout);
+
+        List<List<String>> metaBlocks = List.of(sellerMeta, billMeta, buyerMeta);
+        List<List<PosRun>> paymentLines = posPaymentMethodLines(sale.paymentMethod(), layout);
+        List<PosItemBlock> blocks = buildPosItemBlocks(items, figures, layout);
+
+        List<String> wordsLines = PosText.wrap(FONT_REGULAR, layout.smallSize(),
+                "( In words : " + amountInWords(sale.netTotal()) + " )", layout.contentWidth());
+
+        // Discount and total always print; the taxable/VAT pair only on a VAT bill.
+        int summaryRows = form.vat() ? 4 : 2;
+        List<String> footerLines = posFooterLines("This is a computer generated invoice.", layout);
+
+        float pageHeight = posInvoiceHeight(header, stampLines, metaBlocks, paymentLines,
+                blocks, summaryRows, wordsLines, footerLines, layout);
+
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(new PDRectangle(layout.width(), pageHeight));
+            doc.addPage(page);
+
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                float y = pageHeight - layout.margin();
+
+                y = drawPosHeader(cs, y, header, layout);
+
+                for (String line : stampLines) {
+                    PosText.drawCentered(cs, FONT_BOLD, layout.subtitleSize(), line, y,
+                            layout.margin(), layout.contentWidth());
+                    y -= layout.subtitleSize() + 3;
+                }
+                if (!stampLines.isEmpty()) {
+                    y -= layout.sectionGap() / 2;
+                }
+
+                for (List<String> metaBlock : metaBlocks) {
+                    if (metaBlock.isEmpty()) continue;
+                    y = drawPosMetaLines(cs, y, metaBlock, layout);
+                    y -= layout.sectionGap() / 2;
+                }
+
+                y = drawPosRunLines(cs, y, paymentLines, layout);
+                y -= layout.sectionGap() / 2;
+
+                y = drawPosDivider(cs, y, layout);
+                y = drawPosItemsHeader(cs, y, layout);
+                y = drawPosDivider(cs, y, layout);
+
+                for (PosItemBlock block : blocks) {
+                    y = drawPosItemBlock(cs, y, block, layout);
+                }
+
+                y = drawPosDivider(cs, y, layout);
+                y -= layout.sectionGap() / 2;
+
+                y = drawPosSummaryRow(cs, y, "Discount", money(figures.discount()), false, layout);
+                if (form.vat()) {
+                    y = drawPosSummaryRow(cs, y, "Taxable Amount", money(sale.taxableAmount()), false, layout);
+                    y = drawPosSummaryRow(cs, y, "VAT 13 %", money(sale.vatAmount()), false, layout);
+                }
+                y = drawPosSummaryRow(cs, y, "Total", money(sale.netTotal()), true, layout);
+
+                y -= layout.sectionGap() / 2;
+                for (String line : wordsLines) {
+                    PosText.drawAt(cs, FONT_REGULAR, layout.smallSize(), line, layout.margin(), y);
+                    y -= layout.smallSize() + 3;
+                }
+
+                y -= layout.sectionGap();
+                y = drawPosSignature(cs, y, layout);
+
+                drawPosFooter(cs, footerLines, y, layout);
+            }
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            doc.save(out);
             return out.toByteArray();
-
         } catch (IOException e) {
+            log.error("Failed to generate thermal invoice PDF for #{}", sale.invoiceNumber(), e);
             throw new PosPrintException("Could not render receipt for " + sale.invoiceNumber(), e);
         }
     }
@@ -366,7 +481,7 @@ public class InvoicePdfService {
                 PosText.drawCentered(cs, FONT_BOLD, titleSize, title, y, margin, contentWidth);
                 y -= (titleSize * 0.35f + 4f);
 
-                int printNumber = Math.max(1, sale.printCount() != null ? sale.printCount() : 1);
+                int printNumber = printNumber(sale);
                 if (printNumber > 1) {
                     y -= (subtitleSize * ASCENT_RATIO + 2f);
                     PosText.drawCentered(cs, FONT_BOLD, subtitleSize,
@@ -407,16 +522,16 @@ public class InvoicePdfService {
 
                 float yR = yMetaStart;
                 yR = drawPageTaxField(cs, rightX, yR, "Fiscal Year", sale.fiscalYear(), labelSize, bodySize);
-                String txnDate = notBlank(sale.nepaliDate()) ? sale.nepaliDate() : formatInstant(sale.soldAt());
+                String txnDate = transactionDate(sale);
                 yR = drawPageTaxField(cs, rightX, yR, "Transactions Date", txnDate, labelSize, bodySize);
                 yR = drawPageTaxField(cs, rightX, yR, "Invoice Issue Date", txnDate, labelSize, bodySize);
                 yR = drawPageTaxField(cs, rightX, yR, "Print Count", String.valueOf(printNumber), labelSize, bodySize);
-                yR = drawPageTaxField(cs, rightX, yR, "Payment Status", String.valueOf(sale.paymentStatus()), labelSize, bodySize);
+                yR = drawPageTaxField(cs, rightX, yR, "Payment Status", enumLabel(sale.paymentStatus()), labelSize, bodySize);
 
                 y = Math.min(yL, yR) - sectionGap / 2;
 
                 // 4. Method of payment line
-                String payMethod = String.valueOf(sale.paymentMethod());
+                String payMethod = enumLabel(sale.paymentMethod());
                 String payLabel = "Method of payment: ";
                 PosText.drawAt(cs, FONT_BOLD, labelSize, payLabel, margin, y);
                 PosText.drawAt(cs, FONT_REGULAR, bodySize, payMethod,
@@ -456,12 +571,11 @@ public class InvoicePdfService {
                     }
 
                     BigDecimal rate = figures.rates().get(i);
-                    String qtyStr = quantity(item.quantity()) + (notBlank(item.unitSymbol()) ? " " + item.unitSymbol() : "");
 
                     String[][] itemCells = {
                             {String.valueOf(i + 1)},
                             nameLines.toArray(new String[0]),
-                            {qtyStr},
+                            {quantityWithUnit(item)},
                             {money(rate)},
                             {money(figures.lineTotals().get(i))}
                     };
@@ -783,133 +897,98 @@ public class InvoicePdfService {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Thermal Receipt (POS)
+    // Thermal Invoice (POS roll)
     // ═══════════════════════════════════════════════════════════════════════
 
-    private record ItemBlock(List<String> nameLines, String quantityLine, String amount, String discountLine) {
-        int lineCount() {
-            return nameLines.size() + 1 + (discountLine == null ? 0 : 1);
-        }
-    }
+    /**
+     * Roll length the invoice needs. Mirrors the drawing order of {@link #renderReceipt}
+     * term for term, over the very same pre-wrapped content, so the measured page and the
+     * printed one can never drift apart.
+     */
+    private float posInvoiceHeight(PosHeaderContent header, List<String> stampLines,
+                                   List<List<String>> metaBlocks, List<List<PosRun>> paymentLines,
+                                   List<PosItemBlock> blocks, int summaryRows, List<String> wordsLines,
+                                   List<String> footerLines, PosLayout layout) {
+        float height = layout.margin() * 2; // top and bottom margin
 
-    private void drawReceipt(PDDocument document, SaleDetailResponse sale, MartBranding branding,
-                             PosLayout layout, BillForm form) throws IOException {
+        height += posHeaderHeight(header, layout);
 
-        PrintedFigures figures = printedFigures(sale, form);
-        List<ItemBlock> blocks = buildItemBlocks(sale, figures, layout);
-        // Wrapped once, so the roll is measured from exactly what is drawn on it
-        ReceiptHeader header = receiptHeader(branding, layout);
-        List<String> noticeLines = form.notice() == null ? List.of()
-                : PosText.wrap(FONT_BOLD, layout.subtitleSize(), form.notice(), layout.contentWidth());
-        float height = measureReceipt(sale, form, header, layout, blocks, noticeLines);
-
-        PDPage page = new PDPage(new PDRectangle(layout.width(), height));
-        document.addPage(page);
-
-        try (PDPageContentStream cs = new PDPageContentStream(document, page)) {
-            float y = height - layout.margin();
-            y = drawReceiptHeader(cs, header, sale, form, noticeLines, layout, y);
-            y = drawReceiptItems(cs, layout, blocks, y);
-            y = drawReceiptTotals(cs, sale, form, figures, layout, y);
-            drawReceiptFooter(cs, sale, layout, y);
-        }
-    }
-
-    private float measureReceipt(SaleDetailResponse sale, BillForm form, ReceiptHeader header,
-                                 PosLayout layout, List<ItemBlock> blocks, List<String> noticeLines) {
-
-        float height = layout.margin() * 2;
-        height += receiptHeaderHeight(header, sale, layout);
-        height += noticeLines.size() * layout.lineHeight();
-
-        for (ItemBlock block : blocks) {
-            height += block.lineCount() * layout.lineHeight();
+        height += stampLines.size() * (layout.subtitleSize() + 3);
+        if (!stampLines.isEmpty()) {
+            height += layout.sectionGap() / 2;
         }
 
-        height += layout.dividerGap() * 2;
-        height += receiptTotalsHeight(sale, form, layout);
-        height += layout.sectionGap() + layout.lineHeight() * 4;
+        for (List<String> metaBlock : metaBlocks) {
+            if (metaBlock.isEmpty()) continue;
+            height += metaBlock.size() * layout.lineHeight() + layout.sectionGap() / 2;
+        }
+
+        height += paymentLines.size() * layout.lineHeight() + layout.sectionGap() / 2;
+
+        // Items
+        height += layout.dividerGap(); // divider
+        height += layout.lineHeight(); // column header
+        height += layout.dividerGap(); // divider
+        for (PosItemBlock block : blocks) {
+            height += block.height(layout);
+        }
+        height += layout.dividerGap() + layout.sectionGap() / 2; // divider above the totals
+        height += summaryRows * layout.lineHeight();
+
+        height += layout.sectionGap() / 2 + wordsLines.size() * (layout.smallSize() + 3);
+        height += layout.sectionGap();
+        height += posSignatureHeight(layout);
+        height += posFooterHeight(footerLines, layout);
 
         return height;
     }
 
     /**
-     * Branding lines, already word-wrapped to the content column. Drawn as single centered
+     * Header lines, already word-wrapped to the content column. Drawn as single centered
      * strings, a company name wider than the roll started left of the margin and ran past
      * the right edge, so the print head clipped both ends.
      */
-    private record ReceiptHeader(List<String> nameLines, List<String> contactLines,
-                                 List<String> registrationLines) {
+    private record PosHeaderContent(List<String> nameLines, List<String> contactLines,
+                                    List<String> panLines, List<String> titleLines) {
     }
 
-    private static ReceiptHeader receiptHeader(MartBranding branding, PosLayout layout) {
+    private static PosHeaderContent posHeaderContent(MartBranding branding, String title, PosLayout layout) {
         String companyName = upper(branding.companyName());
         List<String> nameLines = PosText.wrap(FONT_BOLD, layout.titleSize(), companyName, layout.contentWidth());
         if (nameLines.isEmpty()) nameLines = List.of(companyName);
 
         List<String> contactLines =
-                PosText.wrap(FONT_REGULAR, layout.smallSize(), contactLine(branding), layout.contentWidth());
+                PosText.wrap(FONT_REGULAR, layout.smallSize(), buildContactLine(branding), layout.contentWidth());
 
-        List<String> registrationLines = notBlank(branding.registrationNumber())
+        List<String> panLines = notBlank(branding.registrationNumber())
                 ? PosText.wrap(FONT_REGULAR, layout.smallSize(),
-                        "PAN/VAT: " + branding.registrationNumber(), layout.contentWidth())
+                        "PAN: " + branding.registrationNumber(), layout.contentWidth())
                 : List.of();
 
-        return new ReceiptHeader(nameLines, contactLines, registrationLines);
+        List<String> titleLines = PosText.wrap(FONT_BOLD, layout.subtitleSize(), title, layout.contentWidth());
+        if (titleLines.isEmpty()) titleLines = List.of("");
+
+        return new PosHeaderContent(nameLines, contactLines, panLines, titleLines);
     }
 
-    private float receiptHeaderHeight(ReceiptHeader header, SaleDetailResponse sale, PosLayout layout) {
-        float height = layout.titleSize() * ASCENT_RATIO; // ascender clearance for the first line
-        height += header.nameLines().size() * (layout.titleSize() + 4);
-        height += header.contactLines().size() * layout.lineHeight();
-        height += header.registrationLines().size() * layout.lineHeight();
-        height += layout.lineHeight(); // form title
-        int printNumber = Math.max(1, sale.printCount() != null ? sale.printCount() : 1);
-        if (printNumber > 1) height += layout.lineHeight() * 2;
-        height += layout.dividerGap() * 2;
-        height += layout.lineHeight() * 2;
-        if (notBlank(sale.nepaliDate())) height += layout.lineHeight();
-        if (notBlank(sale.customerName())) height += layout.lineHeight();
-        if (notBlank(sale.customerPan())) height += layout.lineHeight();
-        height += layout.sectionGap();
-        return height;
+    /**
+     * Exact height contributed by {@link #drawPosHeader}: company name, one combined
+     * Tel/Email line, PAN line, divider, title, divider.
+     */
+    private float posHeaderHeight(PosHeaderContent header, PosLayout layout) {
+        float h = layout.titleSize() * ASCENT_RATIO; // ascender clearance for the first line
+        h += header.nameLines().size() * (layout.titleSize() + 4);
+        h += header.contactLines().size() * (layout.smallSize() + 3);
+        h += header.panLines().size() * (layout.smallSize() + 3);
+        h += 3f; // buffer before divider
+        h += layout.dividerGap(); // divider
+        h += header.titleLines().size() * (layout.subtitleSize() + layout.sectionGap()); // title
+        h += layout.dividerGap(); // divider
+        return h;
     }
 
-    private float receiptTotalsHeight(SaleDetailResponse sale, BillForm form, PosLayout layout) {
-        int lines = 2;
-        if (isPositive(sale.discountAmount())) lines++;
-        if (form.vat()) lines += 2;
-        if (isPositive(sale.paidAmount())) lines++;
-        if (isPositive(sale.changeAmount())) lines++;
-        if (isPositive(sale.dueAmount())) lines++;
-        return lines * layout.lineHeight();
-    }
-
-    private List<ItemBlock> buildItemBlocks(SaleDetailResponse sale, PrintedFigures figures, PosLayout layout) {
-        float amountWidth = PosText.widthOf(FONT_REGULAR, layout.bodySize(), "0000000.00");
-        float nameWidth = layout.contentWidth() - amountWidth - 4;
-
-        List<ItemBlock> blocks = new ArrayList<>(sale.items().size());
-        for (int i = 0; i < sale.items().size(); i++) {
-            SaleItemResponse item = sale.items().get(i);
-            List<String> nameLines = PosText.wrap(FONT_BOLD, layout.bodySize(), item.productName(), nameWidth);
-            if (nameLines.isEmpty()) {
-                nameLines = List.of("-");
-            }
-
-            blocks.add(new ItemBlock(
-                    nameLines,
-                    quantity(item.quantity()) + " " + item.unitSymbol() + " x " + money(figures.rates().get(i)),
-                    money(figures.lineTotals().get(i)),
-                    isPositive(item.discountAmount()) ? "less disc " + money(figures.lineDiscounts().get(i)) : null));
-        }
-        return blocks;
-    }
-
-    private float drawReceiptHeader(PDPageContentStream cs, ReceiptHeader header, SaleDetailResponse sale,
-                                    BillForm form, List<String> noticeLines, PosLayout layout, float y)
-            throws IOException {
-
+    private float drawPosHeader(PDPageContentStream cs, float y, PosHeaderContent header,
+                                PosLayout layout) throws IOException {
         // The caller hands in the top margin as a baseline, but glyphs rise above their
         // baseline — without this drop the company name is shaved off along the top edge.
         y -= layout.titleSize() * ASCENT_RATIO;
@@ -920,145 +999,232 @@ public class InvoicePdfService {
         }
         for (String line : header.contactLines()) {
             PosText.drawCentered(cs, FONT_REGULAR, layout.smallSize(), line, y, layout.margin(), layout.contentWidth());
-            y -= layout.lineHeight();
+            y -= layout.smallSize() + 3;
         }
-        for (String line : header.registrationLines()) {
+        for (String line : header.panLines()) {
             PosText.drawCentered(cs, FONT_REGULAR, layout.smallSize(), line, y, layout.margin(), layout.contentWidth());
-            y -= layout.lineHeight();
+            y -= layout.smallSize() + 3;
+        }
+        y -= 3f; // small buffer before divider — must match posHeaderHeight()
+
+        y = drawPosDivider(cs, y, layout);
+
+        for (String line : header.titleLines()) {
+            PosText.drawCentered(cs, FONT_BOLD, layout.subtitleSize(), line, y, layout.margin(), layout.contentWidth());
+            y -= layout.subtitleSize() + layout.sectionGap();
         }
 
-        int printNumber = Math.max(1, sale.printCount() != null ? sale.printCount() : 1);
-        PosText.drawCentered(cs, FONT_BOLD, layout.subtitleSize(), form.title().toUpperCase(),
-                y, layout.margin(), layout.contentWidth());
-        y -= layout.lineHeight();
-
-        if (printNumber > 1) {
-            PosText.drawCentered(cs, FONT_BOLD, layout.subtitleSize(),
-                    "COPY OF ORIGINAL (" + printNumber + ")", y, layout.margin(), layout.contentWidth());
-            y -= layout.lineHeight();
-        }
-
-        for (String line : noticeLines) {
-            PosText.drawCentered(cs, FONT_BOLD, layout.subtitleSize(), line,
-                    y, layout.margin(), layout.contentWidth());
-            y -= layout.lineHeight();
-        }
-
-        y = PosText.drawDashedDivider(cs, layout, y, 0.5f);
-
-        PosText.drawAt(cs, FONT_REGULAR, layout.bodySize(), sale.invoiceNumber(), layout.margin(), y);
-        y -= layout.lineHeight();
-        PosText.drawAt(cs, FONT_REGULAR, layout.smallSize(),
-                DATETIME_FMT.format(sale.soldAt()), layout.margin(), y);
-        PosText.drawRightAligned(cs, FONT_REGULAR, layout.smallSize(),
-                String.valueOf(sale.paymentMethod()), layout.contentRight(), y);
-        y -= layout.lineHeight();
-
-        if (printNumber > 1) {
-            PosText.drawAt(cs, FONT_REGULAR, layout.smallSize(),
-                    "Print Count: " + printNumber, layout.margin(), y);
-            y -= layout.lineHeight();
-        }
-
-        if (notBlank(sale.nepaliDate())) {
-            String bsLine = "BS: " + sale.nepaliDate()
-                    + (notBlank(sale.fiscalYear()) ? "  FY: " + sale.fiscalYear() : "");
-            PosText.drawAt(cs, FONT_REGULAR, layout.smallSize(), bsLine, layout.margin(), y);
-            y -= layout.lineHeight();
-        }
-
-        if (notBlank(sale.customerName())) {
-            PosText.drawAt(cs, FONT_REGULAR, layout.smallSize(),
-                    "Customer: " + sale.customerName(), layout.margin(), y);
-            y -= layout.lineHeight();
-        }
-        if (notBlank(sale.customerPan())) {
-            PosText.drawAt(cs, FONT_REGULAR, layout.smallSize(),
-                    "PAN: " + sale.customerPan(), layout.margin(), y);
-            y -= layout.lineHeight();
-        }
-
-        y -= layout.sectionGap();
-        return PosText.drawDashedDivider(cs, layout, y, 0.5f);
+        return drawPosDivider(cs, y, layout);
     }
 
-    private float drawReceiptItems(PDPageContentStream cs, PosLayout layout,
-                                   List<ItemBlock> blocks, float y) throws IOException {
+    /**
+     * One line of the bill as it fits a roll: serial number and details on the first
+     * line(s), quantity and per-unit amount below them, the line total right-aligned beside
+     * the quantity, and the line's own discount under that when it has one.
+     */
+    private record PosItemBlock(List<String> nameLines, String qtyPriceLine, String totalText,
+                                List<String> extraLines) {
+        float height(PosLayout layout) {
+            return nameLines.size() * layout.lineHeight()
+                    + layout.lineHeight() // qty/price + total line
+                    + extraLines.size() * layout.extraLineHeight();
+        }
+    }
 
-        for (ItemBlock block : blocks) {
-            for (String line : block.nameLines()) {
-                PosText.drawAt(cs, FONT_BOLD, layout.bodySize(), line, layout.margin(), y);
-                y -= layout.lineHeight();
-            }
+    private List<PosItemBlock> buildPosItemBlocks(List<SaleItemResponse> items, PrintedFigures figures,
+                                                  PosLayout layout) {
+        float extraWidth = layout.contentWidth() - layout.extraIndent();
 
-            PosText.drawAt(cs, FONT_REGULAR, layout.smallSize(),
-                    block.quantityLine(), layout.margin() + layout.extraIndent(), y);
-            PosText.drawRightAligned(cs, FONT_REGULAR, layout.bodySize(),
-                    block.amount(), layout.contentRight(), y);
+        List<PosItemBlock> blocks = new ArrayList<>(items.size());
+        for (int i = 0; i < items.size(); i++) {
+            SaleItemResponse item = items.get(i);
+            String name = (i + 1) + ". " + (notBlank(item.productName()) ? item.productName() : "—");
+            List<String> nameLines = PosText.wrap(FONT_BOLD, layout.bodySize(), name, layout.contentWidth());
+            if (nameLines.isEmpty()) nameLines = List.of(name);
+
+            // A line total is quantity x rate less the line's discount, so the discount
+            // prints under it or the block would not add up.
+            List<String> extras = isPositive(item.discountAmount())
+                    ? PosText.wrap(FONT_REGULAR, layout.smallSize(),
+                            "Less discount " + money(figures.lineDiscounts().get(i)), extraWidth)
+                    : List.of();
+
+            blocks.add(new PosItemBlock(nameLines,
+                    quantityWithUnit(item) + " x " + money(figures.rates().get(i)),
+                    money(figures.lineTotals().get(i)),
+                    extras));
+        }
+        return blocks;
+    }
+
+    private float drawPosItemBlock(PDPageContentStream cs, float y, PosItemBlock block,
+                                   PosLayout layout) throws IOException {
+        for (String line : block.nameLines()) {
+            PosText.drawAt(cs, FONT_BOLD, layout.bodySize(), line, layout.margin(), y);
             y -= layout.lineHeight();
+        }
 
-            if (block.discountLine() != null) {
-                PosText.drawAt(cs, FONT_REGULAR, layout.smallSize(),
-                        block.discountLine(), layout.margin() + layout.extraIndent(), y);
-                y -= layout.lineHeight();
-            }
+        PosText.drawAt(cs, FONT_REGULAR, layout.bodySize(), block.qtyPriceLine(),
+                layout.margin() + layout.extraIndent(), y);
+        PosText.drawRightAligned(cs, FONT_BOLD, layout.bodySize(), block.totalText(),
+                layout.contentRight(), y);
+        y -= layout.lineHeight();
+
+        for (String extra : block.extraLines()) {
+            PosText.drawAt(cs, FONT_REGULAR, layout.smallSize(), extra,
+                    layout.margin() + layout.extraIndent(), y);
+            y -= layout.extraLineHeight();
         }
         return y;
     }
 
-    private float drawReceiptTotals(PDPageContentStream cs, SaleDetailResponse sale, BillForm form,
-                                    PrintedFigures figures, PosLayout layout, float y) throws IOException {
-
-        y = PosText.drawDashedDivider(cs, layout, y, 0.5f);
-
-        y = receiptTotalLine(cs, layout, "Sub total", money(figures.subTotal()), y, false);
-        if (isPositive(sale.discountAmount())) {
-            y = receiptTotalLine(cs, layout, "Discount", "- " + money(figures.discount()), y, false);
-        }
-        // Only a VAT bill splits the total; a PAN bill charges no VAT at all
-        if (form.vat()) {
-            y = receiptTotalLine(cs, layout, "Taxable", money(sale.taxableAmount()), y, false);
-            y = receiptTotalLine(cs, layout, "VAT 13 %", money(sale.vatAmount()), y, false);
-        }
-
-        y = receiptTotalLine(cs, layout, "TOTAL", money(sale.netTotal()), y, true);
-
-        if (isPositive(sale.paidAmount())) {
-            y = receiptTotalLine(cs, layout, "Paid", money(sale.paidAmount()), y, false);
-        }
-        if (isPositive(sale.changeAmount())) {
-            y = receiptTotalLine(cs, layout, "Change", money(sale.changeAmount()), y, false);
-        }
-        if (isPositive(sale.dueAmount())) {
-            y = receiptTotalLine(cs, layout, "Due", money(sale.dueAmount()), y, true);
-        }
-
-        return y;
-    }
-
-    private float receiptTotalLine(PDPageContentStream cs, PosLayout layout, String label,
-                                   String value, float y, boolean bold) throws IOException {
-        PDType1Font font = bold ? FONT_BOLD : FONT_REGULAR;
-        PosText.drawAt(cs, font, layout.bodySize(), label, layout.margin(), y);
-        PosText.drawRightAligned(cs, font, layout.bodySize(), value, layout.contentRight(), y);
+    private float drawPosItemsHeader(PDPageContentStream cs, float y, PosLayout layout) throws IOException {
+        PosText.drawAt(cs, FONT_BOLD, layout.bodySize(), "S.No. Details", layout.margin(), y);
+        PosText.drawRightAligned(cs, FONT_BOLD, layout.bodySize(), "Amount (Rs)", layout.contentRight(), y);
         return y - layout.lineHeight();
     }
 
-    private void drawReceiptFooter(PDPageContentStream cs, SaleDetailResponse sale,
-                                   PosLayout layout, float y) throws IOException {
-        y -= layout.sectionGap();
-        String words = "( In words : " + amountInWords(sale.netTotal()) + " )";
-        for (String wLine : PosText.wrap(FONT_REGULAR, layout.smallSize(), words, layout.contentWidth())) {
-            PosText.drawCentered(cs, FONT_REGULAR, layout.smallSize(), wLine, y, layout.margin(), layout.contentWidth());
-            y -= layout.smallSize() + 2;
-        }
+    private float drawPosDivider(PDPageContentStream cs, float y, PosLayout layout) throws IOException {
+        return PosText.drawDashedDivider(cs, layout, y, DIVIDER_THICKNESS);
+    }
 
-        y -= 4f;
-        PosText.drawCentered(cs, FONT_REGULAR, layout.smallSize(),
-                sale.paymentStatus() == PaymentStatus.PAID
-                        ? "Thank you, please come again"
-                        : "Balance outstanding",
-                y, layout.margin(), layout.contentWidth());
+    /**
+     * Appends one "Key: value" field, word-wrapped to the content column so a long value
+     * never runs off the edge of the roll. An em dash stands in for anything the bill does
+     * not carry.
+     */
+    private void addPosMetaLine(List<String> out, String key, Object value, PosLayout layout) {
+        String shown = value != null && notBlank(value.toString()) ? value.toString() : "—";
+        String text = key + ": " + shown;
+        List<String> wrapped = PosText.wrap(FONT_REGULAR, layout.bodySize(), text, layout.contentWidth());
+        out.addAll(wrapped.isEmpty() ? List.of(text) : wrapped);
+    }
+
+    private float drawPosMetaLines(PDPageContentStream cs, float y, List<String> lines, PosLayout layout)
+            throws IOException {
+        for (String line : lines) {
+            PosText.drawAt(cs, FONT_REGULAR, layout.bodySize(), line, layout.margin(), y);
+            y -= layout.lineHeight();
+        }
+        return y;
+    }
+
+    /**
+     * A run of text together with the font it is measured and drawn in.
+     */
+    private record PosRun(PDType1Font font, String text) {
+    }
+
+    /**
+     * The form's payment line — the label in regular weight, the method in bold. The pair
+     * fits one line on a roll for every known method, but the method drops to a line of
+     * its own if it ever does not.
+     */
+    private List<List<PosRun>> posPaymentMethodLines(Enum<?> method, PosLayout layout) {
+        String label = "Method of payment: ";
+        String shown = enumLabel(method);
+
+        float width = PosText.widthOf(FONT_REGULAR, layout.bodySize(), label)
+                + PosText.widthOf(FONT_BOLD, layout.bodySize(), shown);
+        if (width <= layout.contentWidth()) {
+            return List.of(List.of(new PosRun(FONT_REGULAR, label), new PosRun(FONT_BOLD, shown)));
+        }
+        return List.of(
+                List.of(new PosRun(FONT_REGULAR, "Method of payment:")),
+                List.of(new PosRun(FONT_BOLD, shown)));
+    }
+
+    /**
+     * Draws pre-flowed lines of mixed-font runs from the left margin, at body size.
+     */
+    private float drawPosRunLines(PDPageContentStream cs, float y, List<List<PosRun>> lines,
+                                  PosLayout layout) throws IOException {
+        for (List<PosRun> line : lines) {
+            float x = layout.margin();
+            for (PosRun run : line) {
+                PosText.drawAt(cs, run.font(), layout.bodySize(), run.text(), x, y);
+                x += PosText.widthOf(run.font(), layout.bodySize(), run.text());
+            }
+            y -= layout.lineHeight();
+        }
+        return y;
+    }
+
+    private float drawPosSummaryRow(PDPageContentStream cs, float y, String label, String amount,
+                                    boolean highlight, PosLayout layout) throws IOException {
+        PDType1Font font = highlight ? FONT_BOLD : FONT_REGULAR;
+        float size = highlight ? layout.bodySize() + 1 : layout.bodySize();
+
+        // The amount owns the right edge; the label is pushed left of it if it would
+        // otherwise overlap, so neither can spill outside the content column.
+        float amountWidth = PosText.widthOf(font, size, amount);
+        float labelWidth = PosText.widthOf(font, size, label);
+        float labelX = Math.min(
+                layout.margin() + layout.contentWidth() * 0.30f,
+                Math.max(layout.margin(), layout.contentRight() - amountWidth - 6f - labelWidth));
+
+        PosText.drawAt(cs, font, size, label, labelX, y);
+        PosText.drawRightAligned(cs, font, size, amount, layout.contentRight(), y);
+
+        return y - layout.lineHeight();
+    }
+
+    /**
+     * Rule to sign on with its caption underneath, right-aligned the way the form has it.
+     * Two blank lines are left above the rule so there is room to actually sign the roll.
+     */
+    private float drawPosSignature(PDPageContentStream cs, float y, PosLayout layout) throws IOException {
+        y -= layout.lineHeight() * 2;
+
+        String caption = "Authorized Signature";
+        float ruleWidth = Math.min(layout.contentWidth(),
+                PosText.widthOf(FONT_BOLD, layout.bodySize(), caption) + layout.extraIndent());
+        cs.setLineWidth(DIVIDER_THICKNESS);
+        cs.moveTo(layout.contentRight() - ruleWidth, y);
+        cs.lineTo(layout.contentRight(), y);
+        cs.stroke();
+        y -= layout.dividerGap();
+
+        PosText.drawRightAligned(cs, FONT_BOLD, layout.bodySize(), caption, layout.contentRight(), y);
+        return y - layout.lineHeight();
+    }
+
+    /**
+     * Exact height contributed by {@link #drawPosSignature}.
+     */
+    private float posSignatureHeight(PosLayout layout) {
+        return layout.lineHeight() * 2 + layout.dividerGap() + layout.lineHeight();
+    }
+
+    /**
+     * Footer message and generation timestamp, wrapped to the content column. Built once
+     * and handed to both {@link #posFooterHeight} and {@link #drawPosFooter}, so the space
+     * reserved always matches what is drawn.
+     */
+    private List<String> posFooterLines(String message, PosLayout layout) {
+        List<String> lines = new ArrayList<>(
+                PosText.wrap(FONT_REGULAR, layout.smallSize(), message, layout.contentWidth()));
+        lines.addAll(PosText.wrap(FONT_REGULAR, layout.smallSize(),
+                "Generated: " + DATETIME_FMT.format(Instant.now()), layout.contentWidth()));
+        return lines;
+    }
+
+    private float posFooterHeight(List<String> footerLines, PosLayout layout) {
+        return layout.sectionGap()
+                + layout.dividerGap()
+                + footerLines.size() * (layout.smallSize() + 3);
+    }
+
+    private void drawPosFooter(PDPageContentStream cs, List<String> footerLines, float y,
+                               PosLayout layout) throws IOException {
+        y -= layout.sectionGap();
+        y = PosText.drawSolidDivider(cs, layout, y, DIVIDER_THICKNESS);
+
+        for (String line : footerLines) {
+            PosText.drawCentered(cs, FONT_REGULAR, layout.smallSize(), line, y,
+                    layout.margin(), layout.contentWidth());
+            y -= layout.smallSize() + 3;
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1117,21 +1283,50 @@ public class InvoicePdfService {
     // Helpers
     // ═══════════════════════════════════════════════════════════════════════
 
-    private static String contactLine(MartBranding branding) {
-        return join(" · ",
-                blankToNull(branding.companyAddress()),
-                prefixed("Tel ", branding.companyPhone()));
-    }
-
     private static String buildContactLine(MartBranding branding) {
         List<String> parts = new ArrayList<>();
         if (notBlank(branding.companyPhone())) parts.add("Tel: " + branding.companyPhone());
         if (notBlank(branding.email())) parts.add("Email: " + branding.email());
-        return String.join("  |  ", parts);
+        return String.join(", ", parts);
     }
 
     private static String formatInstant(Instant instant) {
         return instant == null ? "\u2014" : DATE_FMT.format(instant);
+    }
+
+    /**
+     * A bill that has never been printed still prints as print no. 1 — the original — so
+     * the field is never blank and the copies that follow it count up from there.
+     */
+    private static int printNumber(SaleDetailResponse sale) {
+        return Math.max(1, sale.printCount() != null ? sale.printCount() : 1);
+    }
+
+    /**
+     * The bill is a Nepali document, so it carries the BS date entered at the till; without
+     * one it falls back to the AD date the sale was made.
+     */
+    private static String transactionDate(SaleDetailResponse sale) {
+        return notBlank(sale.nepaliDate()) ? sale.nepaliDate() : formatInstant(sale.soldAt());
+    }
+
+    private static String quantityWithUnit(SaleItemResponse item) {
+        return quantity(item.quantity()) + (notBlank(item.unitSymbol()) ? " " + item.unitSymbol() : "");
+    }
+
+    /**
+     * An enum as the form spells it — CASH prints as "Cash" — so the printed bill reads as a
+     * word rather than as the constant behind it.
+     */
+    private static String enumLabel(Enum<?> value) {
+        if (value == null) return "\u2014";
+        StringBuilder label = new StringBuilder();
+        for (String word : value.name().split("_")) {
+            if (word.isEmpty()) continue;
+            if (!label.isEmpty()) label.append(' ');
+            label.append(word.charAt(0)).append(word.substring(1).toLowerCase(Locale.ROOT));
+        }
+        return label.toString();
     }
 
     private static String truncate(String text, int maxLen) {
@@ -1159,25 +1354,7 @@ public class InvoicePdfService {
         return value != null && !value.isBlank();
     }
 
-    private static String blankToNull(String value) {
-        return notBlank(value) ? value : null;
-    }
-
-    private static String prefixed(String prefix, String value) {
-        return notBlank(value) ? prefix + value : null;
-    }
-
     private static String upper(String value) {
         return notBlank(value) ? value.toUpperCase() : "MART";
-    }
-
-    private static String join(String separator, String... parts) {
-        List<String> present = new ArrayList<>();
-        for (String part : parts) {
-            if (notBlank(part)) {
-                present.add(part);
-            }
-        }
-        return present.isEmpty() ? null : String.join(separator, present);
     }
 }
