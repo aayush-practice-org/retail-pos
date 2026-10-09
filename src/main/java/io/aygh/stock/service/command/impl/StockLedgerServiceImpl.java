@@ -52,9 +52,10 @@ public class StockLedgerServiceImpl implements StockLedgerService {
         BigDecimal change = quantityInBaseUnits.multiply(BigDecimal.valueOf(movementType.direction()));
         BigDecimal balanceAfter = stock.getQuantity().add(change);
 
-        // Checked against the locked row rather than the caller's earlier read:
-        // this is the point at which two tills selling the last item are ordered.
-        if (balanceAfter.signum() < 0) {
+        // Checked against the locked row rather than the caller's earlier read.
+        // A sale is let through regardless — the shelf is ahead of the books
+        // until the purchase is entered — and the balance simply goes negative.
+        if (balanceAfter.signum() < 0 && !movementType.mayOverdraw()) {
             throw new BusinessException("'" + product.getName() + "' has only "
                     + stock.getQuantity().stripTrailingZeros().toPlainString() + " "
                     + product.getBaseUnit().getSymbol() + " on hand");

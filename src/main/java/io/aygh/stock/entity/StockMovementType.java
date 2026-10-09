@@ -41,4 +41,14 @@ public enum StockMovementType {
     public boolean isInflow() {
         return direction > 0;
     }
+
+    /**
+     * Whether this movement may take stock below zero. Only a sale may: the
+     * goods are already in the customer's hand, so the till bills them and the
+     * books catch up when the purchase behind them is entered. Every other
+     * outflow is a claim about stock the mart should be able to point at.
+     */
+    public boolean mayOverdraw() {
+        return this == SALE_OUT;
+    }
 }

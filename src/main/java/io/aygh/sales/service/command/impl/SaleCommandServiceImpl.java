@@ -142,8 +142,8 @@ public class SaleCommandServiceImpl implements SaleCommandService {
         Sale saved = saleRepository.save(sale);
 
         // After the id exists, so every movement points back at the bill that
-        // caused it. This is also where an oversell is caught: the ledger checks
-        // each line against the locked stock row and fails the whole sale.
+        // caused it. A line the books say is not on the shelf is still sold:
+        // the ledger lets a sale take stock below zero rather than refuse it.
         for (SaleItem item : saved.getItems()) {
             stockLedger.post(
                     item.getProduct(),

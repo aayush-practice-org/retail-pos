@@ -40,8 +40,9 @@ public interface StockLedgerService {
 
     /**
      * Whether {@code product} has at least {@code quantityInBaseUnits} on hand.
-     * A read, so it takes no lock — use it to fail a basket early with a readable
-     * message; {@link #post} is what actually holds under a race.
+     * A read, so it takes no lock — use it to warn early with a readable
+     * message; {@link #post} is what actually holds under a race, and it lets a
+     * sale through whatever this says.
      */
     boolean hasAvailable(Product product, BigDecimal quantityInBaseUnits);
 }

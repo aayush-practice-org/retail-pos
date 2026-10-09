@@ -19,9 +19,12 @@ import java.math.BigDecimal;
  * <p>
  * The {@code version} column is the point of the row. Two tills selling the last
  * item at the same moment both read the same quantity; optimistic locking is
- * what makes the second write fail instead of overselling. It is the one entity
- * in the mart that carries one, because it is the one row genuinely contended
- * for.
+ * what makes the second write fail instead of losing the first. It is the one
+ * entity in the mart that carries one, because it is the one row genuinely
+ * contended for.
+ * <p>
+ * The quantity may be negative: a sale is never refused for want of stock, so a
+ * product sold before its purchase was entered reads below zero until it is.
  */
 @Entity
 @Table(name = "product_stocks")
